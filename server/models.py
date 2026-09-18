@@ -128,3 +128,41 @@ class DriftRequest(BaseModel):
     wind_direction_degrees: Optional[float] = None
     hours: Literal[6, 12, 24, 48] = 12
     uncertainty_km: float = 5.0
+# =============================================================================
+# QUICK SPILL ALERT
+# =============================================================================
+class QuickAlertSensitiveAreaModel(BaseModel):
+    """A sensitive receptor the analyst wants alerts checked against.
+
+    The frontend passes the built-in catalogue, so a new receptor type only
+    needs adding here (and to SENSITIVE_AREA_TYPES in alerts.py) to work.
+    """
+    name: str
+    type: Literal[
+        "beach",
+        "port",
+        "coral_reef",
+        "mangrove",
+        "fishing_zone",
+        "island",
+        "marine_protected_area",
+    ]
+    lat: float
+    lon: float
+class QuickAlertEvaluateRequest(BaseModel):
+    """Evaluate one SAR-observed slick reading for immediate alerting."""
+    spill_lat: float
+    spill_lon: float
+    oil_confidence: float
+    area_km2: float
+    detected_at_utc: Optional[str] = None
+    # Forecast time for the slick to reach the nearest sensitive area. Omit when
+    # unknown and the backend estimates it from a simple default advection speed.
+    predicted_impact_hours: Optional[float] = None
+    # Distance from the slick to a shoreline / sensitive receptor, when the
+    # analyst already knows it.
+    distance_to_coast_km: Optional[float] = None
+    # Treated as a boolean flag: true suppresses automatic proximity re-tiering,
+    # false/omitted lets a near-coast high-confidence slick escalate to High.
+    is_offshore: bool = False
+    sensitive_areas: List[QuickAlertSensitiveAreaModel] = []

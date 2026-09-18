@@ -15,6 +15,20 @@ except ImportError:  # pragma: no cover - optional import
     model_status = None
     run_detection = None
 
+try:  # Quick Spill Alert evaluation engine
+    from server.alerts import (
+        ALERT_DISCLAIMER,
+        SENSITIVE_AREA_TYPES,
+        evaluate_quick_alert,
+    )
+except ImportError:  # pragma: no cover - direct script execution
+    from alerts import (
+        ALERT_DISCLAIMER,
+        SENSITIVE_AREA_TYPES,
+        evaluate_quick_alert,
+    )
+
+
 try:
     from server.database import (
         add_vessel_note,
@@ -32,6 +46,7 @@ try:
         RankSuspectsRequest,
         VesselNoteCreate,
         SarAisCorrelateRequest,
+        QuickAlertEvaluateRequest,
     )
 except ImportError:  # pragma: no cover - fallback for direct script execution
     from database import (
@@ -49,6 +64,7 @@ except ImportError:  # pragma: no cover - fallback for direct script execution
         MatchVesselsRequest,
         RankSuspectsRequest,
         VesselNoteCreate,
+        QuickAlertEvaluateRequest,
     )
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -553,6 +569,33 @@ def drift(payload: DriftRequest) -> dict:
         "origin_zone": zone_feature,
         "geojson": {"type": "FeatureCollection", "features": [forward_feature, backward_feature, zone_feature]},
         "warning": warning,
+    }
+
+
+
+# =============================================================================
+# QUICK SPILL ALERT
+# =============================================================================
+@app.post("/api/alerts/evaluate")
+def alerts_evaluate(payload: QuickAlertEvaluateRequest) -> dict:
+    """Evaluate one SAR slick reading and return a Quick Spill Alert.
+
+    Thresholds, severity tiers and recommended actions live in server/alerts.py.
+    Returns severity "None" when no trigger fires, so the caller can tell
+    "no alert" apart from a "Low-severity alert".
+    """
+    return evaluate_quick_alert(payload)
+
+
+@app.get("/api/alerts/sensitive-areas")
+def alerts_sensitive_areas() -> dict:
+    """Return the sensitive-area type catalogue the frontend classifies against."""
+    return {
+        "types": SENSITIVE_AREA_TYPES,
+        "proximity_trigger_km": 20.0,
+        "confidence_trigger_pct": 75.0,
+        "area_trigger_km2": 2.0,
+        "disclaimer": ALERT_DISCLAIMER,
     }
 
 

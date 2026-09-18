@@ -46,7 +46,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       waypoints: null,
       poiFeatures: null,
       liveVessels: null,
-      ml: null
+      ml: null,
+      alerts: null
     },
     liveVesselInterval: null
   };
@@ -363,6 +364,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.layers.liveVessels = L.layerGroup().addTo(state.map);
     state.layers.ml = L.layerGroup().addTo(state.map);
 
+    // Quick Spill Alert markers live on their own layer so the existing toggles
+    // are untouched.
+    state.layers.alerts = L.layerGroup().addTo(state.map);
+    if (window.SpillGuardAlerts) {
+      window.SpillGuardAlertsHost = { map: state.map, layer: state.layers.alerts };
+      // Alerts raised before the map existed are queued without markers — give
+      // them theirs now that the layer is live.
+      window.SpillGuardAlerts.flushPendingMarkers();
+    }
     renderMapData();
     renderMaritimeCorridor();
     startLiveVesselFeed();
@@ -821,6 +831,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.map.removeLayer(state.layers.ml);
     }
   });
+
+  // Quick Spill Alert — wire the bell, panel, toasts and map markers.
+  if (window.SpillGuardAlerts) {
+    window.SpillGuardAlerts.init({ apiBase: window.SPILLGUARD_API_BASE || '' });
+  }
 
   // Region Selector
   document.getElementById('region-selector')?.addEventListener('change', async (e) => {
@@ -1363,7 +1378,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   document.getElementById('btn-predict-forward-drift')?.addEventListener('click', requestDriftForecast);
-  document.getElementById('btn-estimate-source-area')?.addEventListener('click', requestDriftForecast);
   document.getElementById('btn-demo-ocean-conditions')?.addEventListener('click', () => {
     populateDriftInputs();
     document.getElementById('drift-current-speed').value = '0.4';
@@ -1373,15 +1387,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('drift-hours').value = '12';
     document.getElementById('drift-uncertainty').value = '5';
     requestDriftForecast();
-  });
-  document.getElementById('btn-send-origin-vessel-analysis')?.addEventListener('click', () => {
-    const source = state.analysisData.drift?.backward_source_location;
-    if (!source) {
-      document.getElementById('drift-result-summary').textContent = 'Run a drift forecast before sending an origin zone.';
-      return;
-    }
-    state.analysisData.originZone = state.analysisData.drift.origin_zone;
-    runAnalysis(state.selectedSpill, source);
   });
   populateDriftInputs();
 
