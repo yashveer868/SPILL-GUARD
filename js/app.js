@@ -38,8 +38,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       slicks: null,
       ais: null,
       drift: null,
-      eez: null
-    }
+      eez: null,
+      corridor: null,
+      waypoints: null,
+      poiFeatures: null,
+      liveVessels: null
+    },
+    liveVesselInterval: null
   };
 
   const screens = [
@@ -103,8 +108,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       // If opening dashboard, invalidate Leaflet map size
       if (screenId === 'screen-dashboard') {
         setTimeout(() => {
-          if (state.map) state.map.invalidateSize();
-          else initLeafletMap();
+          if (state.map) {
+            state.map.invalidateSize();
+            // refresh region UI on dashboard open
+            updateRegionUI(state.currentRegion);
+          } else {
+            initLeafletMap();
+            // after initialization, render region-specific data
+            setTimeout(() => updateRegionUI(state.currentRegion), 450);
+          }
         }, 100);
       }
 
@@ -273,127 +285,493 @@ document.addEventListener('DOMContentLoaded', async () => {
     const mapEl = document.getElementById('leaflet-map');
     if (!mapEl) return;
 
-    // Default to Malacca Strait TSS
-    const reg = SPILLGUARD_DATA.regions[state.currentRegion];
+    // Ensure container has a rendered height; sometimes flex parents are not sized
+    // immediately which causes Leaflet to render an empty map. Force a sensible
+    // temporary height if clientHeight is zero.
+    if (mapEl.clientHeight === 0) {
+      mapEl.style.minHeight = '60vh';
+    }
+
+    const reg = SPILLGUARD_DATA.regions[state.currentRegion] || {
+      center: [2.5228, 101.7967],
+      zoom: 10
+    };
+
     state.map = L.map('leaflet-map', {
       center: reg.center,
       zoom: reg.zoom,
       zoomControl: true,
-      attributionControl: true
+      attributionControl: true,
+      scrollWheelZoom: true,
+      preferCanvas: true
     });
 
-    // Public OpenStreetMap tiles — no API key required.
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      subdomains: 'abc',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+    // Use Mapbox raster tiles if a token is provided in js/config.js, else fallback to CARTO dark tiles
+    try {
+      const token = (window.MAPBOX_TOKEN || '').trim();
+      if (token) {
+        const style = window.MAPBOX_STYLE || 'mapbox/dark-v10';
+        const url = `https://api.mapbox.com/styles/v1/${style}/tiles/{z}/{x}/{y}@2x?access_token=${token}`;
+        L.tileLayer(url, {
+          tileSize: 512,
+          zoomOffset: -1,
+          maxZoom: 20,
+          attribution: '© Mapbox © OpenStreetMap'
+        }).addTo(state.map);
+      } else {
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          subdomains: 'abcd',
+          maxZoom: 20,
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }).addTo(state.map);
+      }
+    } catch (e) {
+      // If anything fails, fallback to CARTO
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        maxZoom: 20,
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+      }).addTo(state.map);
+      console.warn('Mapbox tiles failed, falling back to CARTO:', e);
+    }
+
+    L.control.scale({
+      position: 'bottomleft',
+      metric: true,
+      imperial: false,
+      maxWidth: 120
     }).addTo(state.map);
 
     state.layers.slicks = L.layerGroup().addTo(state.map);
     state.layers.ais = L.layerGroup().addTo(state.map);
     state.layers.drift = L.layerGroup().addTo(state.map);
+    state.layers.corridor = L.layerGroup().addTo(state.map);
+    state.layers.waypoints = L.layerGroup().addTo(state.map);
+    state.layers.poiFeatures = L.layerGroup().addTo(state.map);
+    state.layers.liveVessels = L.layerGroup().addTo(state.map);
 
     renderMapData();
+    renderMaritimeCorridor();
+    startLiveVesselFeed();
     state.isLeafletInit = true;
+
+    // Give Leaflet a moment to finish tile requests and layout, then invalidate
+    // size to ensure tiles are visible and controls are positioned correctly.
+    setTimeout(() => {
+      try {
+        if (state.map) state.map.invalidateSize();
+      } catch (e) {
+        console.warn('Leaflet invalidateSize failed', e);
+      }
+    }, 350);
   }
 
   function renderMapData() {
+    // Accept optional filtered arrays when provided by updateRegionUI
+    const spillsToUse = arguments[0] || SPILLGUARD_DATA.spills || [];
+    const vesselsToUse = arguments[1] || SPILLGUARD_DATA.vessels || [];
     if (!state.map) return;
     state.layers.slicks.clearLayers();
     state.layers.ais.clearLayers();
     state.layers.drift.clearLayers();
 
-    // 1. Render Spills
-    SPILLGUARD_DATA.spills.forEach(spill => {
-      // Draw Slick Polygon
-      const polygon = L.polygon(spill.slickPolygon, {
-        color: spill.severity === 'critical' ? '#FF4438' : '#FFB020',
+    spillsToUse.forEach(spill => {
+      const polygon = L.polygon(spill.slickPolygon || [], {
+        color: '#EF4444',
         weight: 2,
-        fillColor: spill.severity === 'critical' ? '#FF4438' : '#FFB020',
-        fillOpacity: 0.35,
-        dashArray: '4, 4'
+        opacity: 1,
+        dashArray: '6 6',
+        fillColor: '#EF4444',
+        fillOpacity: 0.3
       }).addTo(state.layers.slicks);
 
       polygon.on('click', () => openSpillDrawer(spill));
-
-      // Draw Pulsing Center Marker
-      const markerHtml = `
-        <div class="spill-marker-pulsing">
-          <div class="spill-marker-wave ${spill.severity === 'medium' ? 'medium-risk' : ''}"></div>
-          <div class="spill-marker-core ${spill.severity === 'medium' ? 'medium-risk' : ''}"></div>
-        </div>
-      `;
-      const customIcon = L.divIcon({
-        className: 'custom-spill-div-icon',
-        html: markerHtml,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22]
-      });
-
-      const marker = L.marker(spill.coords, { icon: customIcon }).addTo(state.layers.slicks);
-      marker.on('click', () => openSpillDrawer(spill));
     });
 
-    // 2. Render AIS Vessels & Track Lines
-    SPILLGUARD_DATA.vessels.forEach(vessel => {
-      // Track Polyline
-      L.polyline(vessel.trackHistory, {
-        color: vessel.isDarkVessel ? '#FF4438' : '#00D4FF',
+    vesselsToUse.forEach((vessel, index) => {
+      const lat = Array.isArray(vessel.coords) ? vessel.coords[0] : (vessel.lat || null);
+      const lng = Array.isArray(vessel.coords) ? vessel.coords[1] : (vessel.lon || null);
+      if (lat === null || lng === null) return;
+
+      const vesselMarker = L.circleMarker([lat, lng], {
+        radius: 7,
+        color: '#F59E0B',
         weight: 2,
-        opacity: vessel.isDarkVessel ? 0.7 : 0.5,
-        dashArray: vessel.isDarkVessel ? '6, 6' : null
+        opacity: 1,
+        dashArray: '5 5',
+        fillColor: '#FFFFFF',
+        fillOpacity: 1
       }).addTo(state.layers.ais);
 
-      // Vessel Marker
-      const vesselIconHtml = `
-        <div style="transform: rotate(${vessel.heading}deg); display: flex; align-items: center; justify-content: center; width: 28px; height: 28px;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="${vessel.isDarkVessel ? '#FF4438' : '#00D4FF'}" stroke="#050B14" stroke-width="1.5">
-            <polygon points="12 2 20 21 12 17 4 21 12 2"/>
-          </svg>
+      vesselMarker.bindPopup(`
+        <div style="color:#0b1220; font-size:12px; line-height:1.5;">
+          <strong>${vessel.name || `Vessel ${index + 1}`}</strong><br>
+          Timestamp: ${vessel.lastAisPing || 'N/A'}<br>
+          Status: ${vessel.isDarkVessel ? 'Dark vessel alert' : 'AIS online'}
         </div>
-      `;
-      const vIcon = L.divIcon({
-        html: vesselIconHtml,
-        className: 'vessel-div-icon',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
+      `);
 
-      const vMarker = L.marker(vessel.coords, { icon: vIcon }).addTo(state.layers.ais);
-      vMarker.bindTooltip(`
-        <div class="mono" style="background: rgba(6,14,25,0.9); border: 1px solid var(--cyan-border); color: #FFF; padding: 4px 8px; border-radius: 4px; font-size: 11px;">
-          <strong>${vessel.name}</strong><br>
-          ${vessel.type} • ${vessel.speed} kt<br>
-          ${vessel.isDarkVessel ? '<span style="color: var(--red-alert);">DARK VESSEL ALERT</span>' : '<span style="color: var(--green-safe);">AIS ONLINE</span>'}
-        </div>
-      `, { permanent: false, direction: 'top' });
+      if (Array.isArray(vessel.trackHistory) && vessel.trackHistory.length > 1) {
+        L.polyline(vessel.trackHistory, {
+          color: '#FF4438',
+          weight: 2,
+          opacity: 0.95,
+          dashArray: '8 8'
+        }).addTo(state.layers.ais);
+
+        if (window.L && typeof L.polylineDecorator === 'function') {
+          L.polylineDecorator(vessel.trackHistory, {
+            patterns: [{
+              offset: '20%',
+              repeat: '36px',
+              symbol: L.Symbol.arrowHead({
+                pixelSize: 10,
+                headAngle: 55,
+                polygon: false,
+                pathOptions: {
+                  stroke: true,
+                  color: '#FF4438',
+                  weight: 2,
+                  opacity: 1,
+                  fill: false
+                }
+              })
+            }]
+          }).addTo(state.layers.ais);
+        }
+      }
     });
 
-    // 3. Render Drift Vectors
-    const primarySpill = SPILLGUARD_DATA.spills[0];
-    const fallbackDrift = [
-      primarySpill.coords,
-      [primarySpill.coords[0] + 0.08, primarySpill.coords[1] - 0.07]
+    const primarySpill = (spillsToUse && spillsToUse[0]) || {};
+    const basePoint = Array.isArray(primarySpill.coords) ? primarySpill.coords : (SPILLGUARD_DATA.regions[state.currentRegion]?.center || [2.5228, 101.7967]);
+    const predictedDrift = [
+      basePoint,
+      [basePoint[0] + 0.06, basePoint[1] - 0.04],
+      [basePoint[0] + 0.11, basePoint[1] - 0.01]
     ];
 
-    if (state.analysisData.drift && state.analysisData.drift.geojson && state.analysisData.drift.geojson.geometry) {
-      const driftCoords = state.analysisData.drift.geojson.geometry.coordinates;
-      if (Array.isArray(driftCoords) && driftCoords.length > 1) {
-        L.polyline(driftCoords, {
-          color: '#FFB020',
-          weight: 3,
-          dashArray: '5, 8',
-          opacity: 0.9
-        }).addTo(state.layers.drift);
-      }
-    } else {
-      L.polyline(fallbackDrift, {
-        color: '#FFB020',
-        weight: 3,
-        dashArray: '5, 8',
-        opacity: 0.9
+    L.polyline(predictedDrift, {
+      color: '#22D3EE',
+      weight: 3,
+      opacity: 1,
+      smoothFactor: 1
+    }).addTo(state.layers.drift);
+
+    const defaultTrack = (vesselsToUse && vesselsToUse[0] && Array.isArray(vesselsToUse[0].trackHistory))
+      ? vesselsToUse[0].trackHistory
+      : [
+          [2.650, 101.450],
+          [2.540, 101.680],
+          [2.440, 101.880],
+          [2.350, 102.010],
+          [2.285, 102.120]
+        ];
+
+    const vesselTrack = L.polyline(defaultTrack, {
+      color: '#FF4438',
+      weight: 2,
+      opacity: 0.95,
+      dashArray: '8 8'
+    }).addTo(state.layers.drift);
+
+    if (window.L && typeof L.polylineDecorator === 'function') {
+      L.polylineDecorator(defaultTrack, {
+        patterns: [{
+          offset: '20%',
+          repeat: '36px',
+          symbol: L.Symbol.arrowHead({
+            pixelSize: 11,
+            headAngle: 55,
+            polygon: false,
+            pathOptions: {
+              stroke: true,
+              color: '#FF4438',
+              weight: 2,
+              opacity: 1,
+              fill: false
+            }
+          })
+        }]
       }).addTo(state.layers.drift);
     }
+
+    vesselTrack.bindPopup(
+      '<div style="color:#0b1220; font-size:12px; line-height:1.5;">' +
+      '<strong>Vessel track</strong><br>' +
+      'Heading history and route corridor' +
+      '</div>'
+    );
+
+    state.map.invalidateSize();
+  }
+
+  // =========================================================================
+  // MARITIME CORRIDOR, WAYPOINTS, POLYGON ZONE, LABELS & POI FEATURES
+  // Port Dickson ≈ [2.5228, 101.7967]  |  Linggi ≈ [2.2700, 101.9700]
+  // =========================================================================
+  function renderMaritimeCorridor() {
+    if (!state.map) return;
+
+    // Clear previous corridor / POI layers
+    state.layers.corridor.clearLayers();
+    state.layers.waypoints.clearLayers();
+    state.layers.poiFeatures.clearLayers();
+
+    // ---- 1. Red Dashed Maritime Corridor (shipping lane polyline) ----
+    const corridorCoords = [
+      [2.2700, 101.9700],  // Linggi entrance
+      [2.3100, 101.9350],  // Channel bend
+      [2.3600, 101.9000],  // Mid-strait waypoint
+      [2.4100, 101.8600],  // Approach marker
+      [2.4500, 101.8200],  // Outer anchorage
+      [2.5000, 101.7900],  // Port Dickson roads
+      [2.5228, 101.7967]   // Port Dickson terminal
+    ];
+
+    const corridor = L.polyline(corridorCoords, {
+      color: '#FF4438',
+      weight: 3.5,
+      opacity: 0.92,
+      dashArray: '12 8',
+      lineCap: 'round',
+      lineJoin: 'round',
+      className: 'maritime-corridor-line'
+    }).addTo(state.layers.corridor);
+
+    corridor.bindPopup(
+      '<div style="color:#0b1220;font-size:12px;line-height:1.5;">' +
+      '<strong style="color:#FF4438;">Maritime Corridor</strong><br>' +
+      'Linggi → Port Dickson TSS Lane<br>' +
+      '<span style="font-family:monospace;font-size:11px;">Traffic Separation Scheme</span></div>'
+    );
+
+    // ---- 2. Orange Circular Waypoints along the corridor ----
+    const waypointData = [
+      { coords: [2.2700, 101.9700], label: 'WP-1 Linggi Entry' },
+      { coords: [2.3100, 101.9350], label: 'WP-2 Channel Bend' },
+      { coords: [2.3600, 101.9000], label: 'WP-3 Mid-Strait' },
+      { coords: [2.4100, 101.8600], label: 'WP-4 Approach' },
+      { coords: [2.4500, 101.8200], label: 'WP-5 Outer Anchorage' },
+      { coords: [2.5000, 101.7900], label: 'WP-6 Port Roads' },
+      { coords: [2.5228, 101.7967], label: 'WP-7 Terminal' }
+    ];
+
+    waypointData.forEach(wp => {
+      const marker = L.circleMarker(wp.coords, {
+        radius: 7,
+        color: '#FFFFFF',
+        weight: 2,
+        opacity: 1,
+        fillColor: '#FF9900',
+        fillOpacity: 0.9,
+        className: 'corridor-waypoint'
+      }).addTo(state.layers.waypoints);
+
+      marker.bindTooltip(wp.label, {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -10],
+        className: 'sg-waypoint-tooltip'
+      });
+    });
+
+    // ---- 3. Red Polygonal Zone near Port Dickson (Priority Monitoring) ----
+    const portDicksonZone = L.polygon([
+      [2.4900, 101.7600],
+      [2.5400, 101.7600],
+      [2.5550, 101.8100],
+      [2.5350, 101.8400],
+      [2.5000, 101.8350],
+      [2.4800, 101.8000]
+    ], {
+      color: '#FF4438',
+      weight: 2.5,
+      opacity: 0.9,
+      fillColor: '#FF4438',
+      fillOpacity: 0.12,
+      dashArray: '6 4',
+      className: 'priority-zone-polygon'
+    }).addTo(state.layers.poiFeatures);
+
+    portDicksonZone.bindPopup(
+      '<div style="color:#0b1220;font-size:12px;line-height:1.5;">' +
+      '<strong style="color:#FF4438;">⚠ Priority Monitoring Zone</strong><br>' +
+      'Port Dickson Critical Maritime Area<br>' +
+      '<span style="font-family:monospace;font-size:11px;">High vessel traffic density</span></div>'
+    );
+
+    // ---- 4. Cyan Intersecting Line (Point of Interest / SAR intercept) ----
+    const cyanLine = L.polyline([
+      [2.3300, 101.8200],
+      [2.4400, 101.9400]
+    ], {
+      color: '#00D4FF',
+      weight: 3,
+      opacity: 0.85,
+      dashArray: '4 6',
+      className: 'poi-intercept-line'
+    }).addTo(state.layers.poiFeatures);
+
+    // Add a pulsing circle at the intersection point
+    const intersectPoint = [2.3850, 101.8800];
+    L.circleMarker(intersectPoint, {
+      radius: 10,
+      color: '#00D4FF',
+      weight: 2,
+      opacity: 1,
+      fillColor: '#00D4FF',
+      fillOpacity: 0.25,
+      className: 'poi-intercept-marker'
+    }).addTo(state.layers.poiFeatures)
+      .bindPopup(
+        '<div style="color:#0b1220;font-size:12px;line-height:1.5;">' +
+        '<strong style="color:#00838f;">SAR Intercept Point</strong><br>' +
+        'Corridor–Slick intersection detected<br>' +
+        '<span style="font-family:monospace;font-size:11px;">02°23\'06"N, 101°52\'48"E</span></div>'
+      );
+
+    cyanLine.bindTooltip('SAR Intercept Vector', {
+      permanent: false,
+      direction: 'center',
+      className: 'sg-poi-tooltip'
+    });
+
+    // ---- 5. Geographic Labels: PORT DICKSON & Linggi ----
+    const portDicksonLabel = L.marker([2.5350, 101.7750], {
+      interactive: false,
+      icon: L.divIcon({
+        className: 'sg-map-label sg-map-label--port-dickson',
+        html: '<span class="sg-label-text">PORT DICKSON</span>',
+        iconSize: [140, 28],
+        iconAnchor: [70, 14]
+      })
+    }).addTo(state.layers.poiFeatures);
+
+    const linggiLabel = L.marker([2.2550, 101.9800], {
+      interactive: false,
+      icon: L.divIcon({
+        className: 'sg-map-label sg-map-label--linggi',
+        html: '<span class="sg-label-text">Linggi</span>',
+        iconSize: [100, 24],
+        iconAnchor: [50, 12]
+      })
+    }).addTo(state.layers.poiFeatures);
+  }
+
+
+  // =========================================================================
+  // LIVE VESSEL POSITION FEED (30-second auto-refresh)
+  // Uses the Digi-Traffic / Finnish AIS open API as a reliable public source.
+  // Fallback: simulated data if the API is unreachable.
+  // =========================================================================
+  const VESSEL_API_URL = 'https://meri.digitraffic.fi/api/ais/v1/locations?latitude=2.45&longitude=101.85&radius=50&from=';
+
+  function buildVesselApiUrl() {
+    // Fetch vessels updated in the last 5 minutes
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    return VESSEL_API_URL + encodeURIComponent(fiveMinAgo);
+  }
+
+  // Simulated vessel positions near Port Dickson / Linggi for offline/demo use
+  function getSimulatedVessels() {
+    const base = [
+      { mmsi: 533130100, name: 'MV Seri Amanah', lat: 2.4950, lon: 101.8100, speed: 8.2, heading: 145 },
+      { mmsi: 563000450, name: 'MT Bunga Lavender', lat: 2.3750, lon: 101.8900, speed: 11.4, heading: 310 },
+      { mmsi: 477325100, name: 'MV Cape Fortuna', lat: 2.4300, lon: 101.8500, speed: 6.7, heading: 198 },
+      { mmsi: 636015821, name: 'MT Ocean Vanguard', lat: 2.3400, lon: 101.9200, speed: 13.1, heading: 275 },
+      { mmsi: 538006789, name: 'MV Strait Pioneer', lat: 2.5100, lon: 101.7700, speed: 4.5, heading: 90 },
+      { mmsi: 304011123, name: 'MV Nordic Carrier', lat: 2.2800, lon: 101.9500, speed: 9.8, heading: 350 },
+      { mmsi: 249014567, name: 'MT Petrolia Star', lat: 2.4600, lon: 101.8300, speed: 7.3, heading: 220 }
+    ];
+
+    // Add slight random drift to simulate movement
+    return base.map(v => ({
+      ...v,
+      lat: v.lat + (Math.random() - 0.5) * 0.01,
+      lon: v.lon + (Math.random() - 0.5) * 0.01,
+      speed: Math.round((v.speed + (Math.random() - 0.5) * 2) * 10) / 10
+    }));
+  }
+
+  async function fetchLiveVesselPositions() {
+    if (!state.map || !state.layers.liveVessels) return;
+
+    let vessels = [];
+
+    try {
+      const resp = await fetch(buildVesselApiUrl(), {
+        signal: AbortSignal.timeout(8000)
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+
+      // Digi-Traffic returns { features: [...] } in GeoJSON
+      if (data && Array.isArray(data.features)) {
+        vessels = data.features.slice(0, 30).map(f => ({
+          mmsi: f.mmsi || f.properties?.mmsi || 0,
+          name: f.properties?.name || `Vessel ${f.mmsi || '?'}`,
+          lat: f.geometry?.coordinates?.[1] ?? 0,
+          lon: f.geometry?.coordinates?.[0] ?? 0,
+          speed: f.properties?.sog ?? 0,
+          heading: f.properties?.cog ?? 0
+        }));
+      }
+    } catch (err) {
+      console.warn('Live vessel API unavailable, using simulated data:', err.message);
+    }
+
+    // Fallback to simulation if API returned nothing
+    if (!vessels.length) {
+      vessels = getSimulatedVessels();
+    }
+
+    updateLiveVesselMarkers(vessels);
+  }
+
+  function updateLiveVesselMarkers(vessels) {
+    state.layers.liveVessels.clearLayers();
+
+    vessels.forEach(v => {
+      if (!v.lat || !v.lon) return;
+
+      // Ship-shaped SVG icon
+      const vesselIcon = L.divIcon({
+        className: 'sg-live-vessel-icon',
+        html: `<div class="sg-vessel-dot" style="transform:rotate(${v.heading || 0}deg);" title="${v.name || 'Vessel'}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L6 18H18L12 2Z" fill="#00D4FF" fill-opacity="0.9" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round"/>
+            <rect x="10" y="16" width="4" height="4" rx="1" fill="#00D4FF" stroke="#FFFFFF" stroke-width="0.8"/>
+          </svg>
+        </div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      const marker = L.marker([v.lat, v.lon], { icon: vesselIcon }).addTo(state.layers.liveVessels);
+
+      marker.bindPopup(
+        `<div style="color:#0b1220;font-size:12px;line-height:1.6;min-width:160px;">
+          <strong>${v.name || 'Unknown Vessel'}</strong><br>
+          <span style="font-family:monospace;font-size:11px;">MMSI: ${v.mmsi}</span><br>
+          Speed: ${v.speed} kt &nbsp;|&nbsp; Heading: ${v.heading}°<br>
+          <span style="color:#888;font-size:10px;">Live AIS • Updated ${new Date().toLocaleTimeString()}</span>
+        </div>`
+      );
+    });
+  }
+
+  function startLiveVesselFeed() {
+    // Clear any existing interval
+    if (state.liveVesselInterval) {
+      clearInterval(state.liveVesselInterval);
+    }
+
+    // Initial fetch
+    fetchLiveVesselPositions();
+
+    // Refresh every 30 seconds
+    state.liveVesselInterval = setInterval(fetchLiveVesselPositions, 30000);
+    console.log('SpillGuard: Live vessel feed started (30s interval)');
   }
 
   // Layer Toggle Controls
@@ -415,15 +793,145 @@ document.addEventListener('DOMContentLoaded', async () => {
     else state.map.removeLayer(state.layers.drift);
   });
 
+  // Maritime Corridor toggle (includes waypoints layer)
+  document.getElementById('layer-toggle-corridor')?.addEventListener('click', function() {
+    this.classList.toggle('active');
+    if (this.classList.contains('active')) {
+      state.layers.corridor.addTo(state.map);
+      state.layers.waypoints.addTo(state.map);
+    } else {
+      state.map.removeLayer(state.layers.corridor);
+      state.map.removeLayer(state.layers.waypoints);
+    }
+  });
+
+  // POI Features toggle (polygon zone, cyan line, labels)
+  document.getElementById('layer-toggle-poi')?.addEventListener('click', function() {
+    this.classList.toggle('active');
+    if (this.classList.contains('active')) state.layers.poiFeatures.addTo(state.map);
+    else state.map.removeLayer(state.layers.poiFeatures);
+  });
+
+  // Live Vessels toggle
+  document.getElementById('layer-toggle-live-vessels')?.addEventListener('click', function() {
+    this.classList.toggle('active');
+    if (this.classList.contains('active')) {
+      state.layers.liveVessels.addTo(state.map);
+      startLiveVesselFeed();
+    } else {
+      state.map.removeLayer(state.layers.liveVessels);
+      if (state.liveVesselInterval) {
+        clearInterval(state.liveVesselInterval);
+        state.liveVesselInterval = null;
+      }
+    }
+  });
+
   // Region Selector
-  document.getElementById('region-selector')?.addEventListener('change', (e) => {
+  document.getElementById('region-selector')?.addEventListener('change', async (e) => {
     const val = e.target.value;
     state.currentRegion = val;
     const reg = SPILLGUARD_DATA.regions[val];
     if (state.map && reg) {
       state.map.flyTo(reg.center, reg.zoom, { duration: 1.2 });
     }
+
+    try {
+      const resp = await fetch(`/api/regions/${val}`, { cache: 'no-store' });
+      if (resp.ok) {
+        const regionData = await resp.json();
+        if (Array.isArray(regionData.spills)) SPILLGUARD_DATA.spills = regionData.spills;
+        if (Array.isArray(regionData.vessels)) SPILLGUARD_DATA.vessels = regionData.vessels;
+      } else {
+        const fallback = await fetch('/api/bootstrap', { cache: 'no-store' });
+        if (fallback.ok) {
+          const data = await fallback.json();
+          if (data.spills) SPILLGUARD_DATA.spills = data.spills;
+          if (data.vessels) SPILLGUARD_DATA.vessels = data.vessels;
+        }
+      }
+    } catch (err) {
+      console.warn('Region fetch failed, using local demo data.', err);
+    } finally {
+      setTimeout(() => updateRegionUI(val), 700);
+    }
   });
+
+  // Haversine distance (km)
+  function haversineKm([lat1, lon1], [lat2, lon2]) {
+    const toRad = v => v * Math.PI / 180;
+    const R = 6371; // km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  function getEntitiesForRegion(regionKey, radiusKm = 200) {
+    // Prefer explicit per-region datasets if provided in data.js
+    if (SPILLGUARD_DATA.regionSpills && SPILLGUARD_DATA.regionSpills[regionKey]) {
+      const spills = SPILLGUARD_DATA.regionSpills[regionKey] || [];
+      const vessels = SPILLGUARD_DATA.regionVessels && SPILLGUARD_DATA.regionVessels[regionKey]
+        ? SPILLGUARD_DATA.regionVessels[regionKey].map(v => ({ ...v, coords: [v.coords ? v.coords[0] : v.lat, v.coords ? v.coords[1] : v.lon] }))
+        : [];
+      return { spills, vessels };
+    }
+
+    const reg = SPILLGUARD_DATA.regions[regionKey];
+    if (!reg) return { spills: SPILLGUARD_DATA.spills, vessels: SPILLGUARD_DATA.vessels };
+    const center = reg.center;
+    const spills = (SPILLGUARD_DATA.spills || []).filter(s => {
+      if (!s.coords) return false;
+      const d = haversineKm(center, s.coords);
+      return d <= radiusKm;
+    });
+    const vessels = (SPILLGUARD_DATA.vessels || []).filter(v => {
+      if (!v.coords) return false;
+      const d = haversineKm(center, v.coords);
+      return d <= radiusKm;
+    });
+    return { spills, vessels };
+  }
+
+  function updateRegionUI(regionKey) {
+    const { spills, vessels } = getEntitiesForRegion(regionKey);
+    const primary = spills[0];
+    // Priority card
+    const idEl = document.getElementById('priority-zone-card');
+    if (primary) {
+      document.getElementById('priority-incident-id').textContent = primary.id || '—';
+      document.getElementById('priority-location-txt').textContent = primary.title || (SPILLGUARD_DATA.regions[regionKey] && SPILLGUARD_DATA.regions[regionKey].name) || '';
+      const miniVals = document.querySelectorAll('.priority-mini-val');
+      if (miniVals && miniVals.length >= 4) {
+        miniVals[0].textContent = primary.areaKm2 ? primary.areaKm2 + ' km²' : '—';
+        miniVals[1].textContent = primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '—';
+        miniVals[2].textContent = primary.confidence ? primary.confidence + '%' : '—';
+        miniVals[3].textContent = primary.primarySuspect ? primary.primarySuspect.name : '—';
+      }
+    } else {
+      document.getElementById('priority-incident-id').textContent = 'No incidents';
+      document.getElementById('priority-location-txt').textContent = SPILLGUARD_DATA.regions[regionKey] ? SPILLGUARD_DATA.regions[regionKey].name : '';
+      document.querySelectorAll('.priority-mini-val').forEach((el, idx) => el.textContent = idx === 0 ? '0 km²' : '—');
+    }
+
+    // Update detail drawer if open or select primary
+    if (primary) {
+      state.selectedSpill = primary;
+      // update drawer values silently
+      document.getElementById('drawer-spill-id').textContent = '#' + primary.id;
+      document.getElementById('drawer-spill-title').textContent = primary.title;
+      document.getElementById('drawer-sensor-tag').textContent = primary.sensor || '';
+      document.getElementById('drawer-spec-area').textContent = primary.areaKm2 ? primary.areaKm2 + ' km²' : '';
+      document.getElementById('drawer-spec-volume').textContent = primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '';
+      document.getElementById('drawer-spec-conf').textContent = primary.confidence ? primary.confidence + '%' : '';
+      document.getElementById('drawer-spec-type').textContent = primary.slickType || '';
+      document.getElementById('drawer-suspect-name').textContent = primary.primarySuspect ? `${primary.primarySuspect.name} (${primary.primarySuspect.confidence}% Match)` : '';
+    }
+
+    // Re-render map with filtered entities
+    renderMapData(spills, vessels);
+  }
 
   // Detail Drawer Logic
   const detailDrawer = document.getElementById('map-detail-drawer');
@@ -458,6 +966,94 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (state.map) {
       state.map.flyTo(SPILLGUARD_DATA.spills[0].coords, 10, { duration: 0.8 });
     }
+  });
+
+  // Alerts sidebar button: open critical slick alert queue (demo: open first critical spill)
+  document.getElementById('side-btn-alerts')?.addEventListener('click', () => {
+    // Ensure the app shell (dashboard) is visible first
+    navigateTo('screen-dashboard');
+
+    const critical = (SPILLGUARD_DATA.spills || []).find(s => s.severity === 'critical');
+
+    // Wait briefly for dashboard/map to become visible and for Leaflet to initialize
+    setTimeout(() => {
+      if (critical) {
+        state.selectedSpill = critical;
+        openSpillDrawer(critical);
+        if (state.map) state.map.flyTo(critical.coords, 10, { duration: 0.8 });
+        // mark sidebar button active
+        document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('side-btn-alerts')?.classList.add('active');
+      } else {
+        // no critical spills: open drawer with message
+        if (detailDrawer) {
+          detailDrawer.classList.add('drawer-open');
+          document.getElementById('drawer-spill-id').textContent = 'No Active Alerts';
+          document.getElementById('drawer-spill-title').textContent = 'Critical Slick Queue';
+          const db = document.querySelector('.drawer-body');
+          if (db) db.innerHTML = '<div style="color:var(--text-muted);">No critical slicks at this time.</div>';
+        }
+      }
+    }, 300);
+  });
+
+  // SAR-AIS Correlation UI handlers
+  document.getElementById('btn-run-correlation')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('correlation-status');
+    const tbody = document.querySelector('#correlation-results tbody');
+    if (statusEl) statusEl.textContent = 'Running...';
+    if (tbody) tbody.innerHTML = '';
+
+    const primary = SPILLGUARD_DATA.spills[0];
+    const payload = {
+      sar_time: primary.detectedAt,
+      sar_lat: primary.coords[0],
+      sar_lon: primary.coords[1],
+      sar_heading: null,
+      sar_length_m: null,
+      ais_records: (SPILLGUARD_DATA.vessels || []).map(v => ({
+        mmsi: v.mmsi,
+        vessel_name: v.name,
+        lat: v.coords[0],
+        lon: v.coords[1],
+        timestamp: v.lastAisPing || new Date().toISOString(),
+        speed_knots: v.speed,
+        heading: v.heading,
+        vessel_type: v.type,
+        length_m: v.length ? parseFloat(String(v.length).replace(/[^0-9.]/g, '')) || null : null
+      }))
+    };
+
+    try {
+      const resp = await fetch('/api/sar-ais/correlate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data && data.results) {
+        data.results.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td style="padding:6px">${r.mmsi}</td><td style="padding:6px; text-align:right">${r.score}</td><td style="padding:6px; text-align:right">${r.distance_km}</td>`;
+          tbody.appendChild(tr);
+        });
+        if (statusEl) statusEl.textContent = data.status === 'matched' ? 'Matched' : 'No match';
+      } else {
+        if (statusEl) statusEl.textContent = 'No AIS data';
+      }
+    } catch (err) {
+      console.error(err);
+      if (statusEl) statusEl.textContent = 'Error';
+    }
+  });
+
+  document.getElementById('btn-demo-correlation')?.addEventListener('click', () => {
+    // quick demo: populate demo AIS positions slightly offset and run
+    const primary = SPILLGUARD_DATA.spills[0];
+    SPILLGUARD_DATA.vessels.forEach((v, i) => {
+      v.coords = [primary.coords[0] + (i + 1) * 0.01, primary.coords[1] - (i + 1) * 0.01];
+    });
+    document.getElementById('btn-run-correlation')?.click();
   });
 
   // Bottom Timeline Scrubber
@@ -925,6 +1521,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     return { spills: [demoSpill], vessels: demoVessels };
   }
 
+  // --- Debug banner: reports window.L presence and #leaflet-map size ---
+  function createDebugBanner() {
+    let banner = document.getElementById('debug-banner');
+    if (banner) return banner;
+    banner = document.createElement('div');
+    banner.id = 'debug-banner';
+    banner.setAttribute('aria-hidden', 'true');
+    banner.style.pointerEvents = 'none';
+    banner.style.opacity = '0.95';
+    document.body.appendChild(banner);
+
+    function update() {
+      const hasL = !!window.L;
+      const mapEl = document.getElementById('leaflet-map');
+      const w = mapEl ? mapEl.clientWidth : 0;
+      const h = mapEl ? mapEl.clientHeight : 0;
+      const mapReady = state.map ? 'yes' : 'no';
+      banner.innerHTML = `Leaflet: <strong>${hasL ? 'loaded' : 'missing'}</strong> | mapObj: <strong>${mapReady}</strong> | #leaflet-map: <strong>${w}×${h}</strong>`;
+      banner.style.display = 'block';
+    }
+
+    update();
+    setInterval(update, 1000);
+    return banner;
+  }
+
+  // Create debug banner on load
+  createDebugBanner();
+
   function loadDemoData() {
     const demo = getDemoDataset();
     SPILLGUARD_DATA.spills = demo.spills;
@@ -939,6 +1564,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     return demo;
+  }
+
+  // Client-side demo-only analysis (no backend calls)
+  function runDemoAnalysis() {
+    const spill = SPILLGUARD_DATA.spills[0];
+    if (!spill) return;
+
+    // Simple heuristic ranking based on distance and dark flag
+    const rankings = (SPILLGUARD_DATA.vessels || []).map((v) => {
+      const lat = Array.isArray(v.coords) ? v.coords[0] : null;
+      const lon = Array.isArray(v.coords) ? v.coords[1] : null;
+      const distance = lat !== null && lon !== null
+        ? (function(){ try { return haversine_distance_km(spill.coords[0], spill.coords[1], lat, lon); } catch(e){ return 999; } })()
+        : 999;
+      let score = Math.max(0, 100 - Math.min(100, distance * 8));
+      if (v.isDarkVessel) score = Math.min(100, score + 25);
+      return {
+        vessel_name: v.name || `Vessel ${v.mmsi}`,
+        total_score: Math.round(score * 100) / 100,
+        priority: score >= 70 ? 'High' : score >= 40 ? 'Medium' : 'Low'
+      };
+    });
+
+    state.analysisData.rankings = rankings.sort((a,b) => b.total_score - a.total_score);
+    state.analysisData.darkWarnings = (SPILLGUARD_DATA.vessels || []).filter(v=>v.isDarkVessel).map(v=>`${v.name}: AIS gap detected`).slice(0,3);
+    renderAnalysisPanel();
   }
 
   async function runAnalysis() {
@@ -1040,7 +1691,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-run-analysis')?.addEventListener('click', runAnalysis);
   document.getElementById('btn-load-demo-data')?.addEventListener('click', async () => {
     loadDemoData();
-    await runAnalysis();
+    // Run demo-only analysis locally (no backend requests)
+    runDemoAnalysis();
   });
 
   renderAnalysisPanel();

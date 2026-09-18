@@ -25,6 +25,7 @@ try:
         MatchVesselsRequest,
         RankSuspectsRequest,
         VesselNoteCreate,
+        SarAisCorrelateRequest,
     )
 except ImportError:  # pragma: no cover - fallback for direct script execution
     from database import (
@@ -102,6 +103,18 @@ def lat_lon_from_bearing(lat: float, lon: float, distance_km: float, bearing_deg
         "lat": math.degrees(new_lat),
         "lon": (math.degrees(new_lon) + 540) % 360 - 180,
     }
+
+
+def dead_reckon_position(lat: float, lon: float, heading_deg: float, speed_knots: float, time_seconds: float) -> Dict[str, float]:
+    """Estimate position after time_seconds using heading and speed (knots).
+    If time_seconds is negative, this reverses the movement (backwards)."""
+    # convert speed knots to km/s
+    if speed_knots is None:
+        return {"lat": lat, "lon": lon}
+    speed_mps = speed_knots * 0.514444
+    distance_km = (abs(time_seconds) * speed_mps) / 1000.0
+    bearing = heading_deg if time_seconds >= 0 else (heading_deg + 180.0) % 360.0
+    return lat_lon_from_bearing(lat, lon, distance_km, bearing)
 
 
 @app.on_event("startup")
@@ -226,6 +239,127 @@ def match_vessels(payload: MatchVesselsRequest) -> dict:
         )
 
     return {
+        "results": results,
+        "warning": "Investigation support, not final proof.",
+    }
+
+
+@app.post("/api/sar-ais/correlate")
+def sar_ais_correlate(payload: SarAisCorrelateRequest) -> dict:
+    """Correlate a single SAR target to AIS records.
+
+    Scoring weights:
+      - distance: 60%
+      - time quality: 20%
+      - heading difference: 10%
+      - length similarity: 10%
+    """
+    sar_time = parse_iso_datetime(payload.sar_time)
+    if sar_time is None:
+        raise HTTPException(status_code=400, detail="sar_time is required")
+
+    results: List[Dict[str, Any]] = []
+    match_found = False
+
+    for rec in payload.ais_records:
+        # parse ais timestamp
+        try:
+            ais_time = parse_iso_datetime(rec.timestamp)
+        except Exception:
+            ais_time = None
+
+        time_diff_minutes = None
+        time_seconds = None
+        if ais_time is not None:
+            time_seconds = (sar_time - ais_time).total_seconds()
+            time_diff_minutes = abs(time_seconds) / 60.0
+
+        # only consider within ±30 minutes
+        if time_diff_minutes is None or time_diff_minutes > 30.0:
+            continue
+
+        # dead-reckon/interpolate to SAR time
+        pred = None
+        if rec.heading is not None and rec.speed_knots is not None:
+            pred = dead_reckon_position(rec.lat, rec.lon, rec.heading, rec.speed_knots, time_seconds)
+        else:
+            pred = {"lat": rec.lat, "lon": rec.lon}
+
+        distance_km = haversine_distance_km(payload.sar_lat, payload.sar_lon, pred["lat"], pred["lon"])
+
+        # component scores
+        # distance score: linear from 0..20km -> 100..0
+        dist_norm = max(0.0, min(1.0, 1.0 - (distance_km / 20.0)))
+        distance_score = dist_norm * 100.0
+
+        # time quality: 0..30min -> 100..0
+        time_quality = max(0.0, min(1.0, 1.0 - (time_diff_minutes / 30.0))) * 100.0 if time_diff_minutes is not None else 0.0
+
+        # heading diff: if SAR heading provided, compute angle diff between SAR heading and AIS heading
+        heading_score = 50.0
+        if payload.sar_heading is not None and rec.heading is not None:
+            diff = abs(((payload.sar_heading - rec.heading + 180.0) % 360.0) - 180.0)
+            heading_score = max(0.0, 100.0 * (1.0 - diff / 180.0))
+        else:
+            # partial credit if missing
+            heading_score = 50.0
+
+        # length similarity: if both present
+        length_score = 50.0
+        if payload.sar_length_m is not None and rec.length_m is not None and rec.length_m > 0:
+            diff_len = abs((payload.sar_length_m or 0.0) - rec.length_m)
+            denom = max(rec.length_m, payload.sar_length_m or 1.0)
+            length_score = max(0.0, 100.0 * (1.0 - (diff_len / denom)))
+
+        # weighted total
+        total = (
+            distance_score * 0.60
+            + time_quality * 0.20
+            + heading_score * 0.10
+            + length_score * 0.10
+        )
+
+        reasons: List[str] = []
+        reasons.append(f"distance_km={distance_km:.3f}")
+        reasons.append(f"time_diff_min={time_diff_minutes:.2f}")
+        reasons.append(f"distance_score={distance_score:.1f}")
+        reasons.append(f"time_quality={time_quality:.1f}")
+
+        match = (distance_km <= 3.0 and total >= 70.0)
+        if match:
+            match_found = True
+
+        results.append(
+            {
+                "mmsi": rec.mmsi,
+                "vessel_name": rec.vessel_name,
+                "predicted_lat": round(pred["lat"], 6),
+                "predicted_lon": round(pred["lon"], 6),
+                "distance_km": round(distance_km, 3),
+                "time_difference_minutes": round(time_diff_minutes, 2) if time_diff_minutes is not None else None,
+                "score": round(total, 2),
+                "matched": match,
+                "reasons": reasons,
+            }
+        )
+
+    if not results:
+        return {
+            "results": [],
+            "message": "No AIS records within ±30 minutes of SAR acquisition. Possible AIS-dark vessel.",
+            "warning": "Investigation support, not final proof.",
+        }
+
+    # sort by score desc
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    top = results[0]
+    status = "matched" if top["matched"] else "no_match"
+
+    return {
+        "sar_target": {"lat": payload.sar_lat, "lon": payload.sar_lon, "time": payload.sar_time},
+        "status": status,
+        "best_match": top,
         "results": results,
         "warning": "Investigation support, not final proof.",
     }
@@ -380,6 +514,260 @@ def drift(payload: DriftRequest) -> dict:
             },
         },
         "warning": "Investigation support, not final proof. This is a simplified prototype estimate.",
+    }
+
+
+REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
+    "malacca": {
+        "spills": [
+            {
+                "id": "SG-8842",
+                "title": "Malacca Strait TSS Central Infiltration",
+                "severity": "critical",
+                "status": "UNATTRIBUTED DISCHARGE",
+                "coords": [2.3812, 101.9124],
+                "areaKm2": 45.2,
+                "volumeBbls": 18400,
+                "confidence": 96.8,
+                "sensor": "Sentinel-1A (C-Band IW VV+VH)",
+                "detectedAt": "2026-09-16 04:12:44 UTC",
+                "wind": "14 kt NW (310°)",
+                "current": "1.8 kt SE (135°)",
+                "surfaceTemp": "29.4°C",
+                "slickType": "Heavy Crude Oil Emulsion",
+                "thumbnail": "assets/images/sar_slick_detail.jpg",
+                "primarySuspect": {
+                    "name": "MT Ocean Vanguard",
+                    "imo": 9482154,
+                    "confidence": 94.8,
+                    "matchType": "High Forensic Correlation"
+                },
+                "slickPolygon": [
+                    [2.420, 101.860],
+                    [2.435, 101.905],
+                    [2.410, 101.960],
+                    [2.370, 101.980],
+                    [2.340, 101.930],
+                    [2.355, 101.875],
+                ],
+            }
+        ],
+        "vessels": [
+            {
+                "name": "MT Ocean Vanguard",
+                "imo": 9482154,
+                "mmsi": 636019842,
+                "flag": "Liberia",
+                "type": "VLCC Crude Tanker",
+                "length": "333m",
+                "coords": [2.285, 102.120],
+                "heading": 132,
+                "speed": 13.8,
+                "lastAisPing": "3 min ago",
+                "isDarkVessel": True,
+                "riskScore": 95,
+                "trackHistory": [
+                    [2.650, 101.450],
+                    [2.540, 101.680],
+                    [2.440, 101.880],
+                    [2.350, 102.010],
+                    [2.285, 102.120],
+                ],
+            },
+            {
+                "name": "Nordic Titan",
+                "imo": 9310842,
+                "mmsi": 538006214,
+                "flag": "Marshall Islands",
+                "type": "Capesize Bulk Carrier",
+                "length": "292m",
+                "coords": [2.480, 101.820],
+                "heading": 130,
+                "speed": 11.4,
+                "lastAisPing": "45 sec ago",
+                "isDarkVessel": False,
+                "riskScore": 42,
+                "trackHistory": [
+                    [2.720, 101.350],
+                    [2.600, 101.600],
+                    [2.480, 101.820],
+                ],
+            },
+        ],
+    },
+    "persian_gulf": {
+        "spills": [
+            {
+                "id": "SG-PG-2101",
+                "title": "Strait of Hormuz Offshore Slick",
+                "severity": "high",
+                "status": "UNDER INVESTIGATION",
+                "coords": [26.45, 55.85],
+                "areaKm2": 18.6,
+                "volumeBbls": 5200,
+                "confidence": 92.1,
+                "sensor": "ICEYE-X12 (X-Band)",
+                "detectedAt": "2026-09-17 02:34:12 UTC",
+                "wind": "18 kt ENE (60°)",
+                "current": "2.1 kt N (0°)",
+                "surfaceTemp": "29.8°C",
+                "slickType": "Fuel Oil Residue",
+                "thumbnail": "assets/images/sar_slick_detail.jpg",
+                "primarySuspect": {
+                    "name": "Al Hadi Trader",
+                    "imo": 9756023,
+                    "confidence": 78.2,
+                    "matchType": "High Confidence"
+                },
+                "slickPolygon": [
+                    [26.47, 55.82],
+                    [26.46, 55.88],
+                    [26.42, 55.89],
+                    [26.40, 55.84],
+                ],
+            }
+        ],
+        "vessels": [
+            {
+                "name": "Al Hadi Trader",
+                "imo": 9756023,
+                "mmsi": 412345678,
+                "flag": "UAE",
+                "type": "Product Tanker",
+                "length": "188m",
+                "coords": [26.46, 55.86],
+                "heading": 90,
+                "speed": 10.2,
+                "lastAisPing": "2 min ago",
+                "isDarkVessel": True,
+                "riskScore": 78,
+                "trackHistory": [
+                    [26.50, 55.80],
+                    [26.47, 55.85],
+                    [26.46, 55.86],
+                ],
+            }
+        ],
+    },
+    "north_sea": {
+        "spills": [
+            {
+                "id": "SG-NS-3310",
+                "title": "Dogger Bank Slick",
+                "severity": "medium",
+                "status": "UNDER INVESTIGATION",
+                "coords": [55.10, 3.20],
+                "areaKm2": 6.4,
+                "volumeBbls": 1200,
+                "confidence": 88.4,
+                "sensor": "RADARSAT-2",
+                "detectedAt": "2026-09-15 18:12:00 UTC",
+                "wind": "16 kt NW (330°)",
+                "current": "1.4 kt SW (225°)",
+                "surfaceTemp": "15.6°C",
+                "slickType": "Oily Water Separator Discharge",
+                "thumbnail": "assets/images/sar_slick_detail.jpg",
+                "primarySuspect": {
+                    "name": "North Sea Carrier",
+                    "imo": 9502048,
+                    "confidence": 41.2,
+                    "matchType": "Secondary Candidate"
+                },
+                "slickPolygon": [
+                    [55.12, 3.18],
+                    [55.11, 3.22],
+                    [55.09, 3.21],
+                    [55.08, 3.19],
+                ],
+            }
+        ],
+        "vessels": [
+            {
+                "name": "North Sea Carrier",
+                "imo": 9502048,
+                "mmsi": 225001122,
+                "flag": "Norway",
+                "type": "Chemical Tanker",
+                "length": "164m",
+                "coords": [55.11, 3.21],
+                "heading": 45,
+                "speed": 12.5,
+                "lastAisPing": "41 sec ago",
+                "isDarkVessel": False,
+                "riskScore": 36,
+                "trackHistory": [
+                    [55.13, 3.12],
+                    [55.11, 3.21],
+                ],
+            }
+        ],
+    },
+    "gulf_mexico": {
+        "spills": [
+            {
+                "id": "SG-GM-4420",
+                "title": "Mississippi Canyon Outer Slick",
+                "severity": "medium",
+                "status": "FLAGGED PRELIMINARY",
+                "coords": [28.75, -88.35],
+                "areaKm2": 9.2,
+                "volumeBbls": 2600,
+                "confidence": 85.0,
+                "sensor": "Sentinel-1B",
+                "detectedAt": "2026-09-14 11:05:22 UTC",
+                "wind": "12 kt SSW (210°)",
+                "current": "1.9 kt WSW (250°)",
+                "surfaceTemp": "27.8°C",
+                "slickType": "Crude Oil Sheen",
+                "thumbnail": "assets/images/sar_slick_detail.jpg",
+                "primarySuspect": {
+                    "name": "Gulf Mariner",
+                    "imo": 9642001,
+                    "confidence": 52.4,
+                    "matchType": "Candidate Match"
+                },
+                "slickPolygon": [
+                    [28.77, -88.40],
+                    [28.76, -88.30],
+                    [28.73, -88.32],
+                ],
+            }
+        ],
+        "vessels": [
+            {
+                "name": "Gulf Mariner",
+                "imo": 9642001,
+                "mmsi": 367001234,
+                "flag": "USA",
+                "type": "Offshore Supply Vessel",
+                "length": "118m",
+                "coords": [28.75, -88.35],
+                "heading": 210,
+                "speed": 9.1,
+                "lastAisPing": "1 min ago",
+                "isDarkVessel": False,
+                "riskScore": 52,
+                "trackHistory": [
+                    [28.80, -88.42],
+                    [28.75, -88.35],
+                ],
+            }
+        ],
+    },
+}
+
+
+@app.get("/api/regions/{region_key}")
+def region_data(region_key: str) -> dict:
+    """Return curated spill and vessel data for a monitoring region."""
+    normalized = region_key.strip().lower()
+    data = REGION_DATASETS.get(normalized)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Region not found: {region_key}")
+    return {
+        "region": normalized,
+        "spills": data.get("spills", []),
+        "vessels": data.get("vessels", []),
     }
 
 

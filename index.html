@@ -517,6 +517,31 @@
                 <div class="analysis-support-note">Investigation support, not final proof</div>
               </div>
 
+                <!-- SAR–AIS Correlation Card -->
+                <div class="correlation-card" style="position:absolute; right:24px; top:120px; width:360px; z-index:520;">
+                  <div style="background:rgba(8,18,32,0.9); border:1px solid var(--cyan-border); padding:12px; border-radius:8px; box-shadow:var(--shadow-card);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                      <div style="font-weight:700; color:var(--cyan-primary);">SAR–AIS Correlation</div>
+                      <div id="correlation-status" style="font-family:var(--font-mono); font-size:12px; color:var(--green-safe);">Idle</div>
+                    </div>
+
+                    <div style="display:flex; gap:8px; margin-bottom:8px;">
+                      <button class="btn-primary" id="btn-run-correlation" style="flex:1;">Run Correlation</button>
+                      <button class="btn-secondary" id="btn-demo-correlation" style="flex:1;">Demo</button>
+                    </div>
+
+                    <div style="max-height:220px; overflow:auto; background:rgba(3,6,10,0.45); border-radius:6px; padding:6px;">
+                      <table id="correlation-results" style="width:100%; font-size:12px; color:var(--text-primary); border-collapse:collapse;">
+                        <thead style="color:var(--text-muted); font-family:var(--font-mono); font-size:11px;">
+                          <tr><th style="text-align:left; padding:6px">MMSI</th><th style="text-align:right; padding:6px">Score</th><th style="text-align:right; padding:6px">Dist km</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                    <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">Warning: investigation support only.</div>
+                  </div>
+                </div>
+
               <!-- New Analysis Output Panel -->
               <div class="analysis-info-panel" id="analysis-info-panel">
                 <div class="analysis-panel-header">
@@ -555,7 +580,11 @@
                 <button class="layer-toggle-btn active" id="layer-toggle-ais">AIS Tracks (7)</button>
                 <button class="layer-toggle-btn active" id="layer-toggle-drift">Drift Vectors</button>
                 <button class="layer-toggle-btn" id="layer-toggle-eez">EEZ Borders</button>
+                <button class="layer-toggle-btn active" id="layer-toggle-corridor">Maritime Corridor</button>
+                <button class="layer-toggle-btn active" id="layer-toggle-poi">POI Features</button>
+                <button class="layer-toggle-btn active" id="layer-toggle-live-vessels">Live Vessels</button>
               </div>
+
 
               <!-- Slide-in Detail Drawer (Right Side) -->
               <div class="map-detail-drawer" id="map-detail-drawer">
@@ -620,29 +649,7 @@
               </div>
 
               <!-- Bottom Timeline Scrubber for Replaying Satellite Passes -->
-              <div class="timeline-scrubber-bar">
-                <div class="scrubber-controls">
-                  <button class="btn-scrub-play" id="btn-scrub-play" title="Replay Satellite Passes">
-                    <svg id="play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  </button>
-                  <button class="scrubber-speed-btn" id="scrubber-speed-btn">1x</button>
-                </div>
-
-                <div class="scrubber-slider-wrapper">
-                  <div class="scrubber-ticks-labels">
-                    <span>T-24h (Yesterday)</span>
-                    <span>T-18h (RADARSAT)</span>
-                    <span>T-12h (ICEYE Pass)</span>
-                    <span>T-6h (Discharge Point)</span>
-                    <span>LIVE (Sentinel-1A)</span>
-                  </div>
-                  <input type="range" min="0" max="100" value="100" class="timeline-range-slider" id="timeline-slider">
-                </div>
-
-                <div class="scrubber-current-timestamp" id="scrubber-timestamp">
-                  LIVE: 2026-09-16 04:12 UTC
-                </div>
-              </div>
+              
             </div>
           </section>
 
@@ -1149,7 +1156,11 @@
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-polylinedecorator@0.4.0/leaflet.polylineDecorator.min.js"></script>
   
+  <!-- Client config (insert your Mapbox token into js/config.js) -->
+  <script src="js/config.js"></script>
+
   <!-- Data & Application Logic -->
   <script src="js/data.js"></script>
   <script src="js/app.js"></script>

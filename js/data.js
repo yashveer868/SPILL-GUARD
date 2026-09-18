@@ -8,8 +8,8 @@ window.SPILLGUARD_DATA = {
   regions: {
     malacca: {
       name: "Strait of Malacca (TSS Corridor)",
-      center: [2.45, 101.85],
-      zoom: 9,
+      center: [2.5228, 101.7967],
+      zoom: 10,
       slicksCount: 3,
       darkVesselsCount: 4,
       riskLevel: "CRITICAL"
@@ -326,6 +326,109 @@ window.SPILLGUARD_DATA = {
       ]
     }
   ],
+
+  // Optional explicit per-region datasets to ensure the UI shows region-specific
+  // incidents and vessel markers without relying on spatial filters.
+  regionSpills: {
+    malacca: [
+      // reuse SG-8842 as primary for Malacca
+      {
+        id: "SG-8842",
+        title: "Malacca Strait TSS Central Infiltration",
+        severity: "critical",
+        coords: [2.3812, 101.9124],
+        areaKm2: 45.2,
+        volumeBbls: 18400,
+        confidence: 96.8,
+        sensor: "Sentinel-1A (C-Band IW VV+VH)",
+        detectedAt: "2026-09-16 04:12:44 UTC",
+        slickPolygon: [
+          [2.420, 101.860],
+          [2.435, 101.905],
+          [2.410, 101.960],
+          [2.370, 101.980],
+          [2.340, 101.930],
+          [2.355, 101.875]
+        ],
+        primarySuspect: { name: "MT Ocean Vanguard", confidence: 94.8 }
+      }
+    ],
+    persian_gulf: [
+      {
+        id: "SG-PG-2101",
+        title: "Strait of Hormuz Offshore Slick",
+        severity: "high",
+        coords: [26.45, 55.85],
+        areaKm2: 18.6,
+        volumeBbls: 5200,
+        confidence: 92.1,
+        sensor: "ICEYE-X12 (X-Band)",
+        detectedAt: "2026-09-17 02:34:12 UTC",
+        slickPolygon: [
+          [26.47, 55.82],
+          [26.46, 55.88],
+          [26.42, 55.89],
+          [26.40, 55.84]
+        ],
+        primarySuspect: { name: "Al Hadi Trader", confidence: 78.2 }
+      }
+    ],
+    north_sea: [
+      {
+        id: "SG-NS-3310",
+        title: "Dogger Bank Slick",
+        severity: "medium",
+        coords: [55.10, 3.20],
+        areaKm2: 6.4,
+        volumeBbls: 1200,
+        confidence: 88.4,
+        sensor: "RADARSAT-2",
+        detectedAt: "2026-09-15 18:12:00 UTC",
+        slickPolygon: [
+          [55.12, 3.18],
+          [55.11, 3.22],
+          [55.09, 3.21],
+          [55.08, 3.19]
+        ],
+        primarySuspect: { name: "Nordic Titan", confidence: 41.2 }
+      }
+    ],
+    gulf_mexico: [
+      {
+        id: "SG-GM-4420",
+        title: "Mississippi Canyon Outer Slick",
+        severity: "medium",
+        coords: [28.75, -88.35],
+        areaKm2: 9.2,
+        volumeBbls: 2600,
+        confidence: 85.0,
+        sensor: "Sentinel-1B",
+        detectedAt: "2026-09-14 11:05:22 UTC",
+        slickPolygon: [
+          [28.77, -88.40],
+          [28.76, -88.30],
+          [28.73, -88.32]
+        ],
+        primarySuspect: { name: "Gulf Mariner", confidence: 52.4 }
+      }
+    ]
+  },
+
+  regionVessels: {
+    malacca: [
+      { name: "MT Ocean Vanguard", mmsi: 636019842, coords: [2.285, 102.120], heading: 132, speed: 13.8 },
+      { name: "Nordic Titan", mmsi: 538006214, coords: [2.480, 101.820], heading: 130, speed: 11.4 }
+    ],
+    persian_gulf: [
+      { name: "Al Hadi Trader", mmsi: 412345678, coords: [26.46, 55.86], heading: 90, speed: 10.2 }
+    ],
+    north_sea: [
+      { name: "North Sea Carrier", mmsi: 225001122, coords: [55.11, 3.21], heading: 45, speed: 12.5 }
+    ],
+    gulf_mexico: [
+      { name: "Gulf Mariner", mmsi: 367001234, coords: [28.75, -88.35], heading: 210, speed: 9.1 }
+    ]
+  },
 
   // Incident SG-8842 Forensic Deep-Dive Data
   investigation: {

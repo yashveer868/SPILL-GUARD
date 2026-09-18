@@ -1394,6 +1394,24 @@ input:focus, select:focus, textarea:focus {
   color: #FFF !important;
 }
 
+/* Debug banner (top-right) */
+#debug-banner, .debug-banner {
+  position: fixed;
+  top: 58px;
+  right: 16px;
+  z-index: 99999;
+  background: rgba(3,6,10,0.88);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.04);
+  pointer-events: none;
+}
+#debug-banner strong, .debug-banner strong { color: var(--cyan-primary); }
+
 /* Custom Marker Styling */
 .spill-marker-pulsing {
   position: relative;
@@ -1439,6 +1457,143 @@ input:focus, select:focus, textarea:focus {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.85); }
 }
+
+/* ==========================================================================
+   MARITIME CORRIDOR, LABELS, WAYPOINTS & LIVE VESSEL STYLES
+   ========================================================================== */
+
+/* --- Geographic Map Labels (PORT DICKSON, Linggi) --- */
+.sg-map-label {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+
+.sg-label-text {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+.sg-map-label--port-dickson .sg-label-text {
+  font-size: 13px;
+  color: #FFFFFF;
+  background: rgba(255, 68, 56, 0.18);
+  border: 1px solid rgba(255, 68, 56, 0.45);
+  box-shadow: 0 0 14px rgba(255, 68, 56, 0.2);
+}
+
+.sg-map-label--linggi .sg-label-text {
+  font-size: 12px;
+  color: #e0f0ff;
+  background: rgba(0, 212, 255, 0.12);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.15);
+}
+
+/* --- Waypoint Tooltips --- */
+.sg-waypoint-tooltip {
+  background: rgba(8, 18, 32, 0.92) !important;
+  color: #FF9900 !important;
+  border: 1px solid rgba(255, 153, 0, 0.4) !important;
+  border-radius: 5px !important;
+  padding: 4px 8px !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+}
+
+.sg-waypoint-tooltip::before {
+  border-top-color: rgba(255, 153, 0, 0.4) !important;
+}
+
+/* --- POI Intercept Tooltip --- */
+.sg-poi-tooltip {
+  background: rgba(8, 18, 32, 0.92) !important;
+  color: #00D4FF !important;
+  border: 1px solid rgba(0, 212, 255, 0.4) !important;
+  border-radius: 5px !important;
+  padding: 4px 8px !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+}
+
+.sg-poi-tooltip::before {
+  border-top-color: rgba(0, 212, 255, 0.4) !important;
+}
+
+/* --- POI Intercept Marker Pulse Animation --- */
+.poi-intercept-marker {
+  animation: poi-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes poi-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* --- Live Vessel Ship Icons --- */
+.sg-live-vessel-icon {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.sg-vessel-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.6s ease;
+  filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.6));
+}
+
+.sg-vessel-dot svg {
+  display: block;
+}
+
+.sg-vessel-dot:hover {
+  filter: drop-shadow(0 0 12px rgba(0, 212, 255, 0.9)) brightness(1.2);
+}
+
+/* --- Corridor Waypoint Hover Effect --- */
+.corridor-waypoint {
+  transition: all 0.2s ease;
+}
+
+.corridor-waypoint:hover {
+  stroke-width: 3;
+  fill-opacity: 1;
+}
+
+/* --- Maritime Corridor Line Glow --- */
+.maritime-corridor-line {
+  filter: drop-shadow(0 0 4px rgba(255, 68, 56, 0.35));
+}
+
+/* --- Priority Zone Polygon --- */
+.priority-zone-polygon {
+  transition: fill-opacity 0.3s ease;
+}
+
+.priority-zone-polygon:hover {
+  fill-opacity: 0.22;
+}
+
+/* --- POI Intercept Line Glow --- */
+.poi-intercept-line {
+  filter: drop-shadow(0 0 5px rgba(0, 212, 255, 0.4));
+}
+
 
 /* Floating Priority Zone Card (Top-Left) */
 .priority-zone-card {

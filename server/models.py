@@ -65,18 +65,30 @@ class AISPointModel(BaseModel):
     speed_knots: Optional[float] = None
     heading: Optional[float] = None
     vessel_type: Optional[str] = None
+    length_m: Optional[float] = None
 
 
 class SARVesselModel(BaseModel):
     id: str
     lat: float
     lon: float
+    heading: Optional[float] = None
+    length_m: Optional[float] = None
 
 
 class MatchVesselsRequest(BaseModel):
     sar_time: str
     sar_vessels: List[SARVesselModel]
     ais_points: List[AISPointModel]
+
+
+class SarAisCorrelateRequest(BaseModel):
+    sar_time: str
+    sar_lat: float
+    sar_lon: float
+    sar_heading: Optional[float] = None
+    sar_length_m: Optional[float] = None
+    ais_records: List[AISPointModel]
 
 
 class RankSuspectVesselModel(BaseModel):
