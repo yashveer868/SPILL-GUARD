@@ -10,6 +10,21 @@ window.SPILLGUARD_DATA = {
       name: "Strait of Malacca (TSS Corridor)",
       center: [2.5228, 101.7967],
       zoom: 10,
+      bounds: [[2.15, 101.20], [2.80, 102.30]],
+      liveFeed: { lat: 2.45, lon: 101.85, radius: 50 },
+      overlays: {
+        corridor: [[2.2700, 101.9700], [2.3100, 101.9350], [2.3600, 101.9000], [2.4100, 101.8600], [2.4500, 101.8200], [2.5000, 101.7900], [2.5228, 101.7967]],
+        waypoints: [
+          { coords: [2.2700, 101.9700], label: 'WP-1 Linggi Entry' }, { coords: [2.3100, 101.9350], label: 'WP-2 Channel Bend' },
+          { coords: [2.3600, 101.9000], label: 'WP-3 Mid-Strait' }, { coords: [2.4100, 101.8600], label: 'WP-4 Approach' },
+          { coords: [2.4500, 101.8200], label: 'WP-5 Outer Anchorage' }, { coords: [2.5000, 101.7900], label: 'WP-6 Port Roads' },
+          { coords: [2.5228, 101.7967], label: 'WP-7 Terminal' }
+        ],
+        priorityZone: [[2.4900, 101.7600], [2.5400, 101.7600], [2.5550, 101.8100], [2.5350, 101.8400], [2.5000, 101.8350], [2.4800, 101.8000]],
+        sarVector: [[2.3300, 101.8200], [2.4400, 101.9400]],
+        sarIntercept: [2.3850, 101.8800],
+        labels: [{ coords: [2.5350, 101.7750], text: 'PORT DICKSON' }, { coords: [2.2550, 101.9800], text: 'Linggi' }]
+      },
       slicksCount: 3,
       darkVesselsCount: 4,
       riskLevel: "CRITICAL"
@@ -18,6 +33,20 @@ window.SPILLGUARD_DATA = {
       name: "Persian Gulf (Strait of Hormuz)",
       center: [26.45, 55.85],
       zoom: 9,
+      bounds: [[25.70, 54.60], [27.20, 57.00]],
+      liveFeed: { lat: 26.45, lon: 55.85, radius: 50 },
+      overlays: {
+        corridor: [[26.15, 56.35], [26.25, 56.10], [26.38, 55.92], [26.45, 55.85], [26.55, 55.72]],
+        waypoints: [
+          { coords: [26.15, 56.35], label: 'WP-1 Gulf of Oman' }, { coords: [26.25, 56.10], label: 'WP-2 Eastern Approach' },
+          { coords: [26.38, 55.92], label: 'WP-3 Strait Center' }, { coords: [26.45, 55.85], label: 'WP-4 Hormuz' },
+          { coords: [26.55, 55.72], label: 'WP-5 Persian Gulf' }
+        ],
+        priorityZone: [[26.40, 55.80], [26.50, 55.80], [26.53, 55.90], [26.45, 55.96], [26.38, 55.90]],
+        sarVector: [[26.30, 56.02], [26.48, 55.84]],
+        sarIntercept: [26.45, 55.85],
+        labels: [{ coords: [26.48, 55.78], text: 'STRAIT OF HORMUZ' }, { coords: [26.20, 56.25], text: 'Gulf of Oman' }]
+      },
       slicksCount: 2,
       darkVesselsCount: 3,
       riskLevel: "HIGH"
@@ -26,6 +55,20 @@ window.SPILLGUARD_DATA = {
       name: "North Sea (Dogger Bank Sector)",
       center: [55.10, 3.20],
       zoom: 8,
+      bounds: [[54.20, 1.00], [56.00, 5.00]],
+      liveFeed: { lat: 55.10, lon: 3.20, radius: 80 },
+      overlays: {
+        corridor: [[54.70, 2.00], [54.85, 2.45], [55.10, 3.20], [55.35, 3.70], [55.60, 4.20]],
+        waypoints: [
+          { coords: [54.70, 2.00], label: 'WP-1 Southern Approach' }, { coords: [54.85, 2.45], label: 'WP-2 Dogger South' },
+          { coords: [55.10, 3.20], label: 'WP-3 Dogger Bank' }, { coords: [55.35, 3.70], label: 'WP-4 Northern Route' },
+          { coords: [55.60, 4.20], label: 'WP-5 North Sea Exit' }
+        ],
+        priorityZone: [[55.04, 3.08], [55.18, 3.08], [55.22, 3.30], [55.08, 3.38], [54.98, 3.25]],
+        sarVector: [[54.92, 2.80], [55.14, 3.25]],
+        sarIntercept: [55.10, 3.20],
+        labels: [{ coords: [55.16, 3.00], text: 'DOGGER BANK' }, { coords: [54.78, 2.10], text: 'North Sea Route' }]
+      },
       slicksCount: 1,
       darkVesselsCount: 1,
       riskLevel: "MODERATE"
@@ -34,6 +77,20 @@ window.SPILLGUARD_DATA = {
       name: "Gulf of Mexico (Mississippi Canyon)",
       center: [28.75, -88.35],
       zoom: 8,
+      bounds: [[27.80, -90.20], [29.60, -86.80]],
+      liveFeed: { lat: 28.75, lon: -88.35, radius: 80 },
+      overlays: {
+        corridor: [[28.20, -89.10], [28.45, -88.75], [28.75, -88.35], [29.05, -88.00], [29.35, -87.65]],
+        waypoints: [
+          { coords: [28.20, -89.10], label: 'WP-1 Deepwater South' }, { coords: [28.45, -88.75], label: 'WP-2 Mississippi Fan' },
+          { coords: [28.75, -88.35], label: 'WP-3 Mississippi Canyon' }, { coords: [29.05, -88.00], label: 'WP-4 Shelf Edge' },
+          { coords: [29.35, -87.65], label: 'WP-5 Northern Route' }
+        ],
+        priorityZone: [[28.65, -88.48], [28.85, -88.48], [28.90, -88.22], [28.72, -88.18], [28.60, -88.32]],
+        sarVector: [[28.45, -88.70], [28.80, -88.30]],
+        sarIntercept: [28.75, -88.35],
+        labels: [{ coords: [28.82, -88.52], text: 'MISSISSIPPI CANYON' }, { coords: [28.30, -88.95], text: 'Gulf of Mexico' }]
+      },
       slicksCount: 2,
       darkVesselsCount: 2,
       riskLevel: "ELEVATED"

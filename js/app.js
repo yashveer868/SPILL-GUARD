@@ -3,10 +3,11 @@
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // The static fixture remains as an offline fallback.  When served through
-  // FastAPI, this loads the persisted SQLite data before the UI is rendered.
+  const apiUrl = (path) => `${(window.SPILLGUARD_API_BASE || '').replace(/\/$/, '')}${path}`;
+
+  // The static fixture remains as an offline fallback when the API is unavailable.
   try {
-    const response = await fetch('/api/bootstrap');
+    const response = await fetch(apiUrl('/api/bootstrap'));
     if (!response.ok) throw new Error(`API returned ${response.status}`);
     const serverData = await response.json();
     Object.assign(SPILLGUARD_DATA, serverData);
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const state = {
     currentScreen: 'screen-splash',
     currentRegion: 'malacca',
+    regionRequestId: 0,
     selectedSpill: SPILLGUARD_DATA.spills[0],
     selectedVesselFilter: 'all',
     isPlayingScrubber: false,
@@ -32,7 +34,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       rankings: [],
       darkWarnings: [],
       drift: null,
-      matchResults: []
+      matchResults: [],
+      originZone: null
     },
     layers: {
       slicks: null,
@@ -42,7 +45,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       corridor: null,
       waypoints: null,
       poiFeatures: null,
-      liveVessels: null
+      liveVessels: null,
+      ml: null
     },
     liveVesselInterval: null
   };
@@ -305,13 +309,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       scrollWheelZoom: true,
       preferCanvas: true
     });
+    if (reg.bounds) state.map.fitBounds(reg.bounds, { padding: [24, 24] });
 
-    // Use Mapbox raster tiles if a token is provided in js/config.js, else fallback to CARTO dark tiles
+    // Prefer MapTiler hybrid tiles, then Mapbox, then the CARTO fallback.
     try {
-      const token = (window.MAPBOX_TOKEN || '').trim();
-      if (token) {
+      const mapTilerKey = (window.MAPTILER_KEY || '').trim();
+      const mapboxToken = (window.MAPBOX_TOKEN || '').trim();
+      if (mapTilerKey) {
+        L.tileLayer(`https://api.maptiler.com/maps/hybrid-v4/256/{z}/{x}/{y}.jpg?key=${encodeURIComponent(mapTilerKey)}`, {
+          tileSize: 256,
+          maxZoom: 20,
+          attribution: '&copy; MapTiler &copy; OpenStreetMap contributors'
+        }).addTo(state.map);
+      } else if (mapboxToken) {
         const style = window.MAPBOX_STYLE || 'mapbox/dark-v10';
-        const url = `https://api.mapbox.com/styles/v1/${style}/tiles/{z}/{x}/{y}@2x?access_token=${token}`;
+        const url = `https://api.mapbox.com/styles/v1/${style}/tiles/{z}/{x}/{y}@2x?access_token=${mapboxToken}`;
         L.tileLayer(url, {
           tileSize: 512,
           zoomOffset: -1,
@@ -332,7 +344,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         maxZoom: 20,
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
       }).addTo(state.map);
-      console.warn('Mapbox tiles failed, falling back to CARTO:', e);
+      console.warn('Map tiles failed, falling back to CARTO:', e);
     }
 
     L.control.scale({
@@ -349,6 +361,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.layers.waypoints = L.layerGroup().addTo(state.map);
     state.layers.poiFeatures = L.layerGroup().addTo(state.map);
     state.layers.liveVessels = L.layerGroup().addTo(state.map);
+    state.layers.ml = L.layerGroup().addTo(state.map);
 
     renderMapData();
     renderMaritimeCorridor();
@@ -374,6 +387,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.layers.slicks.clearLayers();
     state.layers.ais.clearLayers();
     state.layers.drift.clearLayers();
+    state.layers.ml.clearLayers();
 
     spillsToUse.forEach(spill => {
       const polygon = L.polygon(spill.slickPolygon || [], {
@@ -459,58 +473,63 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const defaultTrack = (vesselsToUse && vesselsToUse[0] && Array.isArray(vesselsToUse[0].trackHistory))
       ? vesselsToUse[0].trackHistory
-      : [
-          [2.650, 101.450],
-          [2.540, 101.680],
-          [2.440, 101.880],
-          [2.350, 102.010],
-          [2.285, 102.120]
-        ];
+      : vesselsToUse && vesselsToUse[0] && Array.isArray(vesselsToUse[0].coords)
+        ? [basePoint, vesselsToUse[0].coords]
+        : [basePoint];
 
-    const vesselTrack = L.polyline(defaultTrack, {
-      color: '#FF4438',
-      weight: 2,
-      opacity: 0.95,
-      dashArray: '8 8'
-    }).addTo(state.layers.drift);
-
-    if (window.L && typeof L.polylineDecorator === 'function') {
-      L.polylineDecorator(defaultTrack, {
-        patterns: [{
-          offset: '20%',
-          repeat: '36px',
-          symbol: L.Symbol.arrowHead({
-            pixelSize: 11,
-            headAngle: 55,
-            polygon: false,
-            pathOptions: {
-              stroke: true,
-              color: '#FF4438',
-              weight: 2,
-              opacity: 1,
-              fill: false
-            }
-          })
-        }]
+    if (defaultTrack.length > 1) {
+      const vesselTrack = L.polyline(defaultTrack, {
+        color: '#FF4438',
+        weight: 2,
+        opacity: 0.95,
+        dashArray: '8 8'
       }).addTo(state.layers.drift);
+
+      if (window.L && typeof L.polylineDecorator === 'function') {
+        L.polylineDecorator(defaultTrack, {
+          patterns: [{
+            offset: '20%',
+            repeat: '36px',
+            symbol: L.Symbol.arrowHead({
+              pixelSize: 11,
+              headAngle: 55,
+              polygon: false,
+              pathOptions: {
+                stroke: true,
+                color: '#FF4438',
+                weight: 2,
+                opacity: 1,
+                fill: false
+              }
+            })
+          }]
+        }).addTo(state.layers.drift);
+      }
+
+      vesselTrack.bindPopup(
+        '<div style="color:#0b1220; font-size:12px; line-height:1.5;">' +
+        '<strong>Vessel track</strong><br>' +
+        'Heading history and route corridor' +
+        '</div>'
+      );
     }
 
-    vesselTrack.bindPopup(
-      '<div style="color:#0b1220; font-size:12px; line-height:1.5;">' +
-      '<strong>Vessel track</strong><br>' +
-      'Heading history and route corridor' +
-      '</div>'
-    );
-
+    if (state.analysisData.drift) renderDriftForecast(state.analysisData.drift);
     state.map.invalidateSize();
   }
 
   // =========================================================================
   // MARITIME CORRIDOR, WAYPOINTS, POLYGON ZONE, LABELS & POI FEATURES
-  // Port Dickson ≈ [2.5228, 101.7967]  |  Linggi ≈ [2.2700, 101.9700]
   // =========================================================================
   function renderMaritimeCorridor() {
     if (!state.map) return;
+
+    const region = SPILLGUARD_DATA.regions[state.currentRegion];
+    const overlays = region && region.overlays;
+    if (!overlays || !Array.isArray(overlays.corridor)) {
+      console.warn(`Missing overlay configuration for region: ${state.currentRegion}`);
+      return;
+    }
 
     // Clear previous corridor / POI layers
     state.layers.corridor.clearLayers();
@@ -518,15 +537,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.layers.poiFeatures.clearLayers();
 
     // ---- 1. Red Dashed Maritime Corridor (shipping lane polyline) ----
-    const corridorCoords = [
-      [2.2700, 101.9700],  // Linggi entrance
-      [2.3100, 101.9350],  // Channel bend
-      [2.3600, 101.9000],  // Mid-strait waypoint
-      [2.4100, 101.8600],  // Approach marker
-      [2.4500, 101.8200],  // Outer anchorage
-      [2.5000, 101.7900],  // Port Dickson roads
-      [2.5228, 101.7967]   // Port Dickson terminal
-    ];
+    const corridorCoords = overlays.corridor;
 
     const corridor = L.polyline(corridorCoords, {
       color: '#FF4438',
@@ -541,20 +552,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     corridor.bindPopup(
       '<div style="color:#0b1220;font-size:12px;line-height:1.5;">' +
       '<strong style="color:#FF4438;">Maritime Corridor</strong><br>' +
-      'Linggi → Port Dickson TSS Lane<br>' +
+      `${region.name} monitored shipping lane<br>` +
       '<span style="font-family:monospace;font-size:11px;">Traffic Separation Scheme</span></div>'
     );
 
     // ---- 2. Orange Circular Waypoints along the corridor ----
-    const waypointData = [
-      { coords: [2.2700, 101.9700], label: 'WP-1 Linggi Entry' },
-      { coords: [2.3100, 101.9350], label: 'WP-2 Channel Bend' },
-      { coords: [2.3600, 101.9000], label: 'WP-3 Mid-Strait' },
-      { coords: [2.4100, 101.8600], label: 'WP-4 Approach' },
-      { coords: [2.4500, 101.8200], label: 'WP-5 Outer Anchorage' },
-      { coords: [2.5000, 101.7900], label: 'WP-6 Port Roads' },
-      { coords: [2.5228, 101.7967], label: 'WP-7 Terminal' }
-    ];
+    const waypointData = overlays.waypoints || [];
 
     waypointData.forEach(wp => {
       const marker = L.circleMarker(wp.coords, {
@@ -575,15 +578,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     });
 
-    // ---- 3. Red Polygonal Zone near Port Dickson (Priority Monitoring) ----
-    const portDicksonZone = L.polygon([
-      [2.4900, 101.7600],
-      [2.5400, 101.7600],
-      [2.5550, 101.8100],
-      [2.5350, 101.8400],
-      [2.5000, 101.8350],
-      [2.4800, 101.8000]
-    ], {
+    // ---- 3. Red Polygonal Priority Monitoring Zone ----
+    const priorityZone = L.polygon(overlays.priorityZone || [], {
       color: '#FF4438',
       weight: 2.5,
       opacity: 0.9,
@@ -593,18 +589,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       className: 'priority-zone-polygon'
     }).addTo(state.layers.poiFeatures);
 
-    portDicksonZone.bindPopup(
+    priorityZone.bindPopup(
       '<div style="color:#0b1220;font-size:12px;line-height:1.5;">' +
       '<strong style="color:#FF4438;">⚠ Priority Monitoring Zone</strong><br>' +
-      'Port Dickson Critical Maritime Area<br>' +
+      `${region.name} critical maritime area<br>` +
       '<span style="font-family:monospace;font-size:11px;">High vessel traffic density</span></div>'
     );
 
     // ---- 4. Cyan Intersecting Line (Point of Interest / SAR intercept) ----
-    const cyanLine = L.polyline([
-      [2.3300, 101.8200],
-      [2.4400, 101.9400]
-    ], {
+    const cyanLine = L.polyline(overlays.sarVector || [], {
       color: '#00D4FF',
       weight: 3,
       opacity: 0.85,
@@ -613,7 +606,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }).addTo(state.layers.poiFeatures);
 
     // Add a pulsing circle at the intersection point
-    const intersectPoint = [2.3850, 101.8800];
+    const intersectPoint = overlays.sarIntercept;
     L.circleMarker(intersectPoint, {
       radius: 10,
       color: '#00D4FF',
@@ -636,26 +629,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       className: 'sg-poi-tooltip'
     });
 
-    // ---- 5. Geographic Labels: PORT DICKSON & Linggi ----
-    const portDicksonLabel = L.marker([2.5350, 101.7750], {
-      interactive: false,
+    // ---- 5. Geographic Labels ----
+    (overlays.labels || []).forEach(label => {
+      const mapLabel = L.marker(label.coords, {
+        interactive: false,
       icon: L.divIcon({
-        className: 'sg-map-label sg-map-label--port-dickson',
-        html: '<span class="sg-label-text">PORT DICKSON</span>',
+        className: 'sg-map-label',
+        html: `<span class="sg-label-text">${label.text}</span>`,
         iconSize: [140, 28],
         iconAnchor: [70, 14]
       })
-    }).addTo(state.layers.poiFeatures);
-
-    const linggiLabel = L.marker([2.2550, 101.9800], {
-      interactive: false,
-      icon: L.divIcon({
-        className: 'sg-map-label sg-map-label--linggi',
-        html: '<span class="sg-label-text">Linggi</span>',
-        iconSize: [100, 24],
-        iconAnchor: [50, 12]
-      })
-    }).addTo(state.layers.poiFeatures);
+      }).addTo(state.layers.poiFeatures);
+    });
   }
 
 
@@ -664,42 +649,42 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Uses the Digi-Traffic / Finnish AIS open API as a reliable public source.
   // Fallback: simulated data if the API is unreachable.
   // =========================================================================
-  const VESSEL_API_URL = 'https://meri.digitraffic.fi/api/ais/v1/locations?latitude=2.45&longitude=101.85&radius=50&from=';
-
   function buildVesselApiUrl() {
+    const region = SPILLGUARD_DATA.regions[state.currentRegion];
+    const feed = region && region.liveFeed;
+    if (!feed) return null;
     // Fetch vessels updated in the last 5 minutes
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    return VESSEL_API_URL + encodeURIComponent(fiveMinAgo);
+    return `https://meri.digitraffic.fi/api/ais/v1/locations?latitude=${feed.lat}&longitude=${feed.lon}&radius=${feed.radius}&from=${encodeURIComponent(fiveMinAgo)}`;
   }
 
-  // Simulated vessel positions near Port Dickson / Linggi for offline/demo use
+  // Simulated vessel positions for the selected region when live AIS is unavailable.
   function getSimulatedVessels() {
-    const base = [
-      { mmsi: 533130100, name: 'MV Seri Amanah', lat: 2.4950, lon: 101.8100, speed: 8.2, heading: 145 },
-      { mmsi: 563000450, name: 'MT Bunga Lavender', lat: 2.3750, lon: 101.8900, speed: 11.4, heading: 310 },
-      { mmsi: 477325100, name: 'MV Cape Fortuna', lat: 2.4300, lon: 101.8500, speed: 6.7, heading: 198 },
-      { mmsi: 636015821, name: 'MT Ocean Vanguard', lat: 2.3400, lon: 101.9200, speed: 13.1, heading: 275 },
-      { mmsi: 538006789, name: 'MV Strait Pioneer', lat: 2.5100, lon: 101.7700, speed: 4.5, heading: 90 },
-      { mmsi: 304011123, name: 'MV Nordic Carrier', lat: 2.2800, lon: 101.9500, speed: 9.8, heading: 350 },
-      { mmsi: 249014567, name: 'MT Petrolia Star', lat: 2.4600, lon: 101.8300, speed: 7.3, heading: 220 }
-    ];
+    const base = getEntitiesForRegion(state.currentRegion).vessels || [];
 
     // Add slight random drift to simulate movement
-    return base.map(v => ({
-      ...v,
-      lat: v.lat + (Math.random() - 0.5) * 0.01,
-      lon: v.lon + (Math.random() - 0.5) * 0.01,
-      speed: Math.round((v.speed + (Math.random() - 0.5) * 2) * 10) / 10
-    }));
+    return base.map(v => {
+      const lat = Array.isArray(v.coords) ? v.coords[0] : v.lat;
+      const lon = Array.isArray(v.coords) ? v.coords[1] : v.lon;
+      return {
+        ...v,
+        lat: lat + (Math.random() - 0.5) * 0.01,
+        lon: lon + (Math.random() - 0.5) * 0.01,
+        speed: Math.round((v.speed + (Math.random() - 0.5) * 2) * 10) / 10
+      };
+    });
   }
 
   async function fetchLiveVesselPositions() {
     if (!state.map || !state.layers.liveVessels) return;
 
+    const regionAtRequest = state.currentRegion;
     let vessels = [];
 
     try {
-      const resp = await fetch(buildVesselApiUrl(), {
+      const vesselApiUrl = buildVesselApiUrl();
+      if (!vesselApiUrl) throw new Error('No vessel feed configured for region');
+      const resp = await fetch(vesselApiUrl, {
         signal: AbortSignal.timeout(8000)
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -725,7 +710,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       vessels = getSimulatedVessels();
     }
 
-    updateLiveVesselMarkers(vessels);
+    if (regionAtRequest === state.currentRegion) updateLiveVesselMarkers(vessels);
   }
 
   function updateLiveVesselMarkers(vessels) {
@@ -827,33 +812,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // ML Detections toggle
+  document.getElementById('layer-toggle-ml')?.addEventListener('click', function() {
+    this.classList.toggle('active');
+    if (this.classList.contains('active')) {
+      state.layers.ml.addTo(state.map);
+    } else {
+      state.map.removeLayer(state.layers.ml);
+    }
+  });
+
   // Region Selector
   document.getElementById('region-selector')?.addEventListener('change', async (e) => {
     const val = e.target.value;
-    state.currentRegion = val;
     const reg = SPILLGUARD_DATA.regions[val];
-    if (state.map && reg) {
-      state.map.flyTo(reg.center, reg.zoom, { duration: 1.2 });
+    if (!reg || !validateRegionConfig(val, reg)) {
+      console.warn(`Unknown or invalid region selected: ${val}`);
+      return;
     }
+    state.currentRegion = val;
+    const requestId = ++state.regionRequestId;
+    state.analysisData.drift = null;
+    state.analysisData.originZone = null;
+    updateRegionUI(val);
 
     try {
-      const resp = await fetch(`/api/regions/${val}`, { cache: 'no-store' });
-      if (resp.ok) {
+      const resp = await fetch(apiUrl(`/api/regions/${val}`), { cache: 'no-store' });
+      if (resp.ok && requestId === state.regionRequestId && state.currentRegion === val) {
         const regionData = await resp.json();
-        if (Array.isArray(regionData.spills)) SPILLGUARD_DATA.spills = regionData.spills;
-        if (Array.isArray(regionData.vessels)) SPILLGUARD_DATA.vessels = regionData.vessels;
-      } else {
-        const fallback = await fetch('/api/bootstrap', { cache: 'no-store' });
-        if (fallback.ok) {
-          const data = await fallback.json();
-          if (data.spills) SPILLGUARD_DATA.spills = data.spills;
-          if (data.vessels) SPILLGUARD_DATA.vessels = data.vessels;
-        }
+        if (Array.isArray(regionData.spills)) SPILLGUARD_DATA.regionSpills[val] = regionData.spills;
+        if (Array.isArray(regionData.vessels)) SPILLGUARD_DATA.regionVessels[val] = regionData.vessels;
+        updateRegionUI(val);
       }
     } catch (err) {
       console.warn('Region fetch failed, using local demo data.', err);
-    } finally {
-      setTimeout(() => updateRegionUI(val), 700);
     }
   });
 
@@ -894,8 +886,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     return { spills, vessels };
   }
 
+  function validateRegionConfig(regionKey, region) {
+    const [lat, lon] = region.center || [];
+    const validCoordinate = Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+    const validOverlays = region.overlays && Array.isArray(region.overlays.corridor) && Array.isArray(region.overlays.sarVector);
+    if (!validCoordinate || !validOverlays) {
+      console.warn(`Invalid geographic configuration for region: ${regionKey}`);
+      return false;
+    }
+    return true;
+  }
+
   function updateRegionUI(regionKey) {
+    const region = SPILLGUARD_DATA.regions[regionKey];
+    if (!region || !validateRegionConfig(regionKey, region)) return;
     const { spills, vessels } = getEntitiesForRegion(regionKey);
+    SPILLGUARD_DATA.spills = spills;
+    SPILLGUARD_DATA.vessels = vessels;
+    if (state.layers.liveVessels) state.layers.liveVessels.clearLayers();
     const primary = spills[0];
     // Priority card
     const idEl = document.getElementById('priority-zone-card');
@@ -918,6 +926,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Update detail drawer if open or select primary
     if (primary) {
       state.selectedSpill = primary;
+      renderSpillAnalysis(primary);
       // update drawer values silently
       document.getElementById('drawer-spill-id').textContent = '#' + primary.id;
       document.getElementById('drawer-spill-title').textContent = primary.title;
@@ -925,12 +934,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('drawer-spec-area').textContent = primary.areaKm2 ? primary.areaKm2 + ' km²' : '';
       document.getElementById('drawer-spec-volume').textContent = primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '';
       document.getElementById('drawer-spec-conf').textContent = primary.confidence ? primary.confidence + '%' : '';
-      document.getElementById('drawer-spec-type').textContent = primary.slickType || '';
+      document.getElementById('drawer-spec-type').textContent = primary.slickType || primary.slick_type || 'Hydrocarbon oil residue';
       document.getElementById('drawer-suspect-name').textContent = primary.primarySuspect ? `${primary.primarySuspect.name} (${primary.primarySuspect.confidence}% Match)` : '';
     }
 
     // Re-render map with filtered entities
-    renderMapData(spills, vessels);
+    if (state.map) {
+      renderMapData(spills, vessels);
+      renderMaritimeCorridor();
+      if (region.bounds) state.map.fitBounds(region.bounds, { padding: [24, 24], maxZoom: region.zoom });
+      else state.map.flyTo(region.center, region.zoom, { duration: 1.2 });
+      if (state.layers.liveVessels && state.map.hasLayer(state.layers.liveVessels)) fetchLiveVesselPositions();
+    }
   }
 
   // Detail Drawer Logic
@@ -938,6 +953,165 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnCloseDrawer = document.getElementById('btn-close-drawer');
   const btnDrawerInvestigate = document.getElementById('btn-drawer-investigate');
   const btnInspectPriority = document.getElementById('btn-inspect-priority');
+
+  const EARTH_RADIUS_KM = 6371.0088;
+
+  function geoJsonRingForSpill(spill) {
+    const geometry = spill?.geojson?.geometry || spill?.geometry || (spill?.type === 'Feature' ? spill.geometry : null);
+    if (geometry?.type === 'Polygon' && Array.isArray(geometry.coordinates?.[0])) {
+      return geometry.coordinates[0].map(([lon, lat]) => [lon, lat]);
+    }
+
+    const polygon = spill?.slickPolygon;
+    if (!Array.isArray(polygon)) return null;
+    return polygon.map(point => {
+      if (!Array.isArray(point) || point.length < 2) return null;
+      const [first, second] = point;
+      // Bundled fixtures use [lat, lon]; GeoJSON uses [lon, lat].
+      return Math.abs(first) > 90 || Math.abs(second) <= 90
+        ? [first, second]
+        : [second, first];
+    });
+  }
+
+  function projectGeoJsonRing(ring, latitude) {
+    const latitudeRad = latitude * Math.PI / 180;
+    return ring.map(([lon, lat]) => ({
+      x: EARTH_RADIUS_KM * lon * Math.PI / 180 * Math.cos(latitudeRad),
+      y: EARTH_RADIUS_KM * lat * Math.PI / 180
+    }));
+  }
+
+  function haversinePoints(a, b) {
+    const toRad = value => value * Math.PI / 180;
+    const dLat = toRad(b[1] - a[1]);
+    const dLon = toRad(b[0] - a[0]);
+    const latA = toRad(a[1]);
+    const latB = toRad(b[1]);
+    const value = Math.sin(dLat / 2) ** 2 + Math.cos(latA) * Math.cos(latB) * Math.sin(dLon / 2) ** 2;
+    return 2 * EARTH_RADIUS_KM * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+  }
+
+  function confidenceLabel(confidence) {
+    if (!Number.isFinite(confidence)) return 'Unrated';
+    if (confidence >= 90) return 'Very high confidence';
+    if (confidence >= 75) return 'High confidence';
+    if (confidence >= 50) return 'Moderate confidence';
+    return 'Low confidence';
+  }
+
+  function analyzeSpill(spill) {
+    const fallback = spill || SPILLGUARD_DATA.spills?.[0];
+    const fallbackCoords = fallback?.coords || SPILLGUARD_DATA.regions[state.currentRegion]?.center || [2.3812, 101.9124];
+    const ring = geoJsonRingForSpill(fallback) || [
+      [fallbackCoords[1] - 0.02, fallbackCoords[0] - 0.02],
+      [fallbackCoords[1] + 0.02, fallbackCoords[0] - 0.02],
+      [fallbackCoords[1] + 0.02, fallbackCoords[0] + 0.02],
+      [fallbackCoords[1] - 0.02, fallbackCoords[0] + 0.02]
+    ];
+
+    const uniqueRing = ring.filter(point => point && point.every(Number.isFinite));
+    if (uniqueRing.length < 3) return { valid: false, message: 'Invalid spill polygon: at least three coordinate pairs are required.' };
+    const closedRing = uniqueRing.length > 1 && uniqueRing[0][0] === uniqueRing.at(-1)[0] && uniqueRing[0][1] === uniqueRing.at(-1)[1]
+      ? uniqueRing.slice(0, -1)
+      : uniqueRing;
+    if (closedRing.length < 3) return { valid: false, message: 'Invalid spill polygon: the ring has too few unique points.' };
+
+    const meanLat = closedRing.reduce((sum, point) => sum + point[1], 0) / closedRing.length;
+    const projected = projectGeoJsonRing(closedRing, meanLat);
+    let twiceArea = 0;
+    let centroidX = 0;
+    let centroidY = 0;
+    for (let index = 0; index < projected.length; index += 1) {
+      const current = projected[index];
+      const next = projected[(index + 1) % projected.length];
+      const cross = current.x * next.y - next.x * current.y;
+      twiceArea += cross;
+      centroidX += (current.x + next.x) * cross;
+      centroidY += (current.y + next.y) * cross;
+    }
+
+    const areaKm2 = Math.abs(twiceArea / 2);
+    if (!Number.isFinite(areaKm2) || areaKm2 < 0.0001) {
+      return { valid: false, message: 'Spill polygon is too small to analyze reliably.' };
+    }
+
+    const signedArea = twiceArea / 2;
+    const center = signedArea ? { x: centroidX / (6 * signedArea), y: centroidY / (6 * signedArea) } : projected[0];
+    const centroid = [center.x / (EARTH_RADIUS_KM * Math.PI / 180 * Math.cos(meanLat * Math.PI / 180)), center.y / (EARTH_RADIUS_KM * Math.PI / 180)];
+    const lons = closedRing.map(point => point[0]);
+    const lats = closedRing.map(point => point[1]);
+    const bbox = { west: Math.min(...lons), south: Math.min(...lats), east: Math.max(...lons), north: Math.max(...lats) };
+    const perimeterKm = closedRing.reduce((sum, point, index) => sum + haversinePoints(point, closedRing[(index + 1) % closedRing.length]), 0);
+
+    const meanX = projected.reduce((sum, point) => sum + point.x, 0) / projected.length;
+    const meanY = projected.reduce((sum, point) => sum + point.y, 0) / projected.length;
+    let xx = 0; let xy = 0; let yy = 0;
+    projected.forEach(point => { xx += (point.x - meanX) ** 2; xy += (point.x - meanX) * (point.y - meanY); yy += (point.y - meanY) ** 2; });
+    const angle = 0.5 * Math.atan2(2 * xy, xx - yy);
+    const axis = { x: Math.cos(angle), y: Math.sin(angle) };
+    const crossAxis = { x: -axis.y, y: axis.x };
+    const primary = projected.map(point => point.x * axis.x + point.y * axis.y);
+    const secondary = projected.map(point => point.x * crossAxis.x + point.y * crossAxis.y);
+    const lengthKm = Math.max(...primary) - Math.min(...primary);
+    const widthKm = Math.max(...secondary) - Math.min(...secondary);
+    const orientationDeg = (Math.atan2(axis.x, axis.y) * 180 / Math.PI + 360) % 180;
+
+    const region = SPILLGUARD_DATA.regions[state.currentRegion];
+    const sensitiveRing = region?.overlays?.priorityZone;
+    let sensitiveZone = 'No demo sensitive zone configured';
+    let sensitiveDistanceKm = null;
+    if (Array.isArray(sensitiveRing) && sensitiveRing.length >= 3) {
+      sensitiveDistanceKm = Math.min(...closedRing.flatMap(spillPoint => sensitiveRing.map(zonePoint => haversineKm(spillPoint, zonePoint))));
+      sensitiveZone = 'Priority monitoring zone';
+    }
+
+    return {
+      valid: true,
+      spill: fallback,
+      geojson: { type: 'Feature', properties: { id: fallback?.id || 'demo-spill', title: fallback?.title || 'Demo spill' }, geometry: { type: 'Polygon', coordinates: [[...closedRing, closedRing[0]]] } },
+      areaKm2,
+      perimeterKm,
+      centroid: { lat: centroid[1], lon: centroid[0] },
+      bbox,
+      lengthKm,
+      widthKm,
+      orientationDeg,
+      sensitiveZone,
+      sensitiveDistanceKm,
+      confidence: Number(fallback?.confidence)
+    };
+  }
+
+  function formatMetric(value, suffix = '') {
+    return Number.isFinite(value) ? `${value.toFixed(2)}${suffix}` : '—';
+  }
+
+  function renderSpillAnalysis(spill) {
+    const status = document.getElementById('spill-analysis-status');
+    const metrics = document.getElementById('spill-analysis-metrics');
+    const badge = document.getElementById('spill-analysis-confidence');
+    const analysis = analyzeSpill(spill);
+    state.analysisData.spillAnalysis = analysis;
+    if (!status || !metrics || !badge) return;
+    if (!analysis.valid) {
+      status.textContent = analysis.message;
+      metrics.innerHTML = '';
+      badge.textContent = 'Invalid geometry';
+      return;
+    }
+    badge.textContent = confidenceLabel(analysis.confidence);
+    status.textContent = 'Computed from the selected SpillEvent polygon.';
+    metrics.innerHTML = [
+      ['Area', formatMetric(analysis.areaKm2, ' km²')],
+      ['Perimeter', formatMetric(analysis.perimeterKm, ' km')],
+      ['Centroid', `${analysis.centroid.lat.toFixed(5)}°, ${analysis.centroid.lon.toFixed(5)}°`],
+      ['Bounding box', `${analysis.bbox.south.toFixed(3)}° to ${analysis.bbox.north.toFixed(3)}° / ${analysis.bbox.west.toFixed(3)}° to ${analysis.bbox.east.toFixed(3)}°`],
+      ['Approx. length × width', `${formatMetric(analysis.lengthKm, ' km')} × ${formatMetric(analysis.widthKm, ' km')}`],
+      ['Main orientation', `${analysis.orientationDeg.toFixed(1)}°`],
+      [`Nearest ${analysis.sensitiveZone}`, analysis.sensitiveDistanceKm === null ? 'Unavailable' : formatMetric(analysis.sensitiveDistanceKm, ' km')]
+    ].map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('');
+  }
 
   function openSpillDrawer(spill) {
     state.selectedSpill = spill;
@@ -947,8 +1121,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('drawer-spec-area').textContent = spill.areaKm2 + ' km²';
     document.getElementById('drawer-spec-volume').textContent = spill.volumeBbls.toLocaleString() + ' bbls';
     document.getElementById('drawer-spec-conf').textContent = spill.confidence + '%';
-    document.getElementById('drawer-spec-type').textContent = spill.slickType;
+    document.getElementById('drawer-spec-type').textContent = spill.slickType || spill.slick_type || 'Hydrocarbon oil residue';
     document.getElementById('drawer-suspect-name').textContent = `${spill.primarySuspect.name} (${spill.primarySuspect.confidence}% Match)`;
+    renderSpillAnalysis(spill);
+    populateDriftInputs(spill);
     
     detailDrawer?.classList.add('drawer-open');
   }
@@ -1025,7 +1201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     try {
-      const resp = await fetch('/api/sar-ais/correlate', {
+      const resp = await fetch(apiUrl('/api/sar-ais/correlate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1102,6 +1278,112 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-back-to-dashboard')?.addEventListener('click', () => {
     navigateTo('screen-dashboard');
   });
+
+  function populateDriftInputs(spill = state.selectedSpill || SPILLGUARD_DATA.spills?.[0]) {
+    if (!spill) return;
+    const latInput = document.getElementById('drift-spill-lat');
+    const lonInput = document.getElementById('drift-spill-lon');
+    const timeInput = document.getElementById('drift-sar-time');
+    if (latInput) latInput.value = spill.coords?.[0] ?? '';
+    if (lonInput) lonInput.value = spill.coords?.[1] ?? '';
+    if (timeInput && !timeInput.value) timeInput.value = new Date().toISOString().slice(0, 16);
+  }
+
+  function driftInputs() {
+    const value = id => document.getElementById(id)?.value;
+    const sarTime = value('drift-sar-time');
+    return {
+      spill_lat: Number(value('drift-spill-lat')),
+      spill_lon: Number(value('drift-spill-lon')),
+      sar_time: sarTime ? `${sarTime}:00Z` : null,
+      current_speed_mps: Number(value('drift-current-speed')),
+      current_direction_degrees: Number(value('drift-current-direction')),
+      wind_speed_mps: Number(value('drift-wind-speed') || 0),
+      wind_direction_degrees: Number(value('drift-wind-direction') || 0),
+      hours: Number(value('drift-hours')),
+      uncertainty_km: Number(value('drift-uncertainty'))
+    };
+  }
+
+  function addDriftArrows(coordinates, color) {
+    if (!state.map || coordinates.length < 2) return;
+    const latLngs = coordinates.map(([lon, lat]) => [lat, lon]);
+    L.polyline(latLngs, { color, weight: 3, opacity: 0.95, dashArray: color === '#F59E0B' ? '8 6' : null }).addTo(state.layers.drift);
+    if (typeof L.polylineDecorator === 'function') {
+      L.polylineDecorator(latLngs, {
+        patterns: [{ offset: '12%', repeat: '48px', symbol: L.Symbol.arrowHead({
+          pixelSize: 10, polygon: false, pathOptions: { color, fill: false, stroke: true, weight: 2 }
+        }) }]
+      }).addTo(state.layers.drift);
+    }
+  }
+
+  function renderDriftForecast(data) {
+    if (!state.map || !state.layers.drift) return;
+    state.layers.drift.clearLayers();
+    if (!data) return;
+    addDriftArrows(data.forward_path?.geometry?.coordinates || [], '#2563EB');
+    addDriftArrows(data.backward_path?.geometry?.coordinates || [], '#F59E0B');
+    if (data.origin_zone) {
+      L.geoJSON(data.origin_zone, {
+        style: { color: '#F59E0B', weight: 2, fillColor: '#F59E0B', fillOpacity: 0.2, dashArray: '5 4' }
+      }).bindPopup('Possible source area: uncertainty zone, not an exact source point.').addTo(state.layers.drift);
+    }
+    (data.hourly_locations || []).filter(item => [6, 12, 24, 48].includes(item.hour)).forEach(item => {
+      const point = item.forward;
+      L.circleMarker([point.lat, point.lon], { radius: 5, color: '#60A5FA', fillColor: '#2563EB', fillOpacity: 0.9, weight: 1 })
+        .bindTooltip(`Forward ${item.hour}h`, { direction: 'top' }).addTo(state.layers.drift);
+    });
+  }
+
+  async function requestDriftForecast() {
+    const status = document.getElementById('drift-control-status');
+    const summary = document.getElementById('drift-result-summary');
+    const payload = driftInputs();
+    if (!Number.isFinite(payload.spill_lat) || !Number.isFinite(payload.spill_lon) || !Number.isFinite(payload.current_speed_mps) || !Number.isFinite(payload.uncertainty_km)) {
+      if (summary) summary.textContent = 'Enter valid coordinates, current speed, and uncertainty.';
+      return;
+    }
+    if (status) status.textContent = 'RUNNING';
+    try {
+      const response = await fetch(apiUrl('/api/drift'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+      const data = await response.json();
+      state.analysisData.drift = data;
+      state.analysisData.originZone = data.origin_zone;
+      renderDriftForecast(data);
+      const origin = data.backward_source_location;
+      if (summary) summary.textContent = `Source zone centered near ${origin.lat.toFixed(4)}°, ${origin.lon.toFixed(4)}° (${payload.uncertainty_km.toFixed(1)} km radius). ${data.warning}`;
+      document.getElementById('drift-hourly-list').innerHTML = (data.hourly_locations || []).filter(item => [6, 12, 24, 48].includes(item.hour)).map(item => `<div class="drift-hourly-row"><span>${item.hour}h forecast</span><span>${item.forward.lat.toFixed(3)}°, ${item.forward.lon.toFixed(3)}°</span></div>`).join('');
+      if (status) status.textContent = 'COMPLETE';
+    } catch (error) {
+      if (status) status.textContent = 'OFFLINE';
+      if (summary) summary.textContent = `Drift forecast failed: ${error.message}`;
+    }
+  }
+
+  document.getElementById('btn-predict-forward-drift')?.addEventListener('click', requestDriftForecast);
+  document.getElementById('btn-estimate-source-area')?.addEventListener('click', requestDriftForecast);
+  document.getElementById('btn-demo-ocean-conditions')?.addEventListener('click', () => {
+    populateDriftInputs();
+    document.getElementById('drift-current-speed').value = '0.4';
+    document.getElementById('drift-current-direction').value = '138';
+    document.getElementById('drift-wind-speed').value = '7.3';
+    document.getElementById('drift-wind-direction').value = '310';
+    document.getElementById('drift-hours').value = '12';
+    document.getElementById('drift-uncertainty').value = '5';
+    requestDriftForecast();
+  });
+  document.getElementById('btn-send-origin-vessel-analysis')?.addEventListener('click', () => {
+    const source = state.analysisData.drift?.backward_source_location;
+    if (!source) {
+      document.getElementById('drift-result-summary').textContent = 'Run a drift forecast before sending an origin zone.';
+      return;
+    }
+    state.analysisData.originZone = state.analysisData.drift.origin_zone;
+    runAnalysis(state.selectedSpill, source);
+  });
+  populateDriftInputs();
 
   let driftParticles = [];
   function initDriftSimulation() {
@@ -1521,35 +1803,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return { spills: [demoSpill], vessels: demoVessels };
   }
 
-  // --- Debug banner: reports window.L presence and #leaflet-map size ---
-  function createDebugBanner() {
-    let banner = document.getElementById('debug-banner');
-    if (banner) return banner;
-    banner = document.createElement('div');
-    banner.id = 'debug-banner';
-    banner.setAttribute('aria-hidden', 'true');
-    banner.style.pointerEvents = 'none';
-    banner.style.opacity = '0.95';
-    document.body.appendChild(banner);
-
-    function update() {
-      const hasL = !!window.L;
-      const mapEl = document.getElementById('leaflet-map');
-      const w = mapEl ? mapEl.clientWidth : 0;
-      const h = mapEl ? mapEl.clientHeight : 0;
-      const mapReady = state.map ? 'yes' : 'no';
-      banner.innerHTML = `Leaflet: <strong>${hasL ? 'loaded' : 'missing'}</strong> | mapObj: <strong>${mapReady}</strong> | #leaflet-map: <strong>${w}×${h}</strong>`;
-      banner.style.display = 'block';
-    }
-
-    update();
-    setInterval(update, 1000);
-    return banner;
-  }
-
-  // Create debug banner on load
-  createDebugBanner();
-
   function loadDemoData() {
     const demo = getDemoDataset();
     SPILLGUARD_DATA.spills = demo.spills;
@@ -1592,12 +1845,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderAnalysisPanel();
   }
 
-  async function runAnalysis() {
-    const spill = SPILLGUARD_DATA.spills[0];
+  async function runAnalysis(spillOverride = null, originOverride = null) {
+    const spill = spillOverride || state.selectedSpill || SPILLGUARD_DATA.spills[0];
     if (!spill) return;
 
     const spillLat = spill.coords[0];
     const spillLon = spill.coords[1];
+    const analysisOrigin = originOverride || { lat: spillLat, lon: spillLon };
     const payload = {
       sar_time: '2026-09-17T10:00:00Z',
       sar_vessels: [{ id: 'sar_1', lat: spillLat, lon: spillLon }],
@@ -1615,17 +1869,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       const [matchResponse, rankingResponse, driftResponse] = await Promise.all([
-        fetch('/api/match-vessels', {
+        fetch(apiUrl('/api/match-vessels'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         }),
-        fetch('/api/rank-suspects', {
+        fetch(apiUrl('/api/rank-suspects'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            origin_lat: spillLat,
-            origin_lon: spillLon,
+            origin_lat: analysisOrigin.lat,
+            origin_lon: analysisOrigin.lon,
             release_start: '2026-09-17T03:00:00Z',
             release_end: '2026-09-17T05:00:00Z',
             vessels: SPILLGUARD_DATA.vessels.map(v => ({
@@ -1640,7 +1894,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }))
           })
         }),
-        fetch('/api/drift', {
+        fetch(apiUrl('/api/drift'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1688,12 +1942,176 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  document.getElementById('btn-run-analysis')?.addEventListener('click', runAnalysis);
+  document.getElementById('btn-run-analysis')?.addEventListener('click', () => runAnalysis(state.selectedSpill));
   document.getElementById('btn-load-demo-data')?.addEventListener('click', async () => {
     loadDemoData();
     // Run demo-only analysis locally (no backend requests)
     runDemoAnalysis();
   });
+
+
+  // =========================================================================
+  // ML DETECTION: UNet segmentation + DBSCAN clustering (via /api/detect/*)
+  // =========================================================================
+  const ML_POLYGON_STYLE = {
+    color: '#FFB020',
+    weight: 2,
+    opacity: 1,
+    fillColor: '#FFB020',
+    fillOpacity: 0.22,
+    dashArray: '4 4'
+  };
+
+  function renderMLDetections(data) {
+    // Clear previous ML results
+    state.layers.ml.clearLayers();
+    const badge = document.getElementById('ml-engine-badge');
+    const statusEl = document.getElementById('ml-status');
+    const previewImg = document.getElementById('ml-preview-img');
+    const clustersSlot = document.getElementById('ml-clusters-slot');
+    const legendEl = document.getElementById('ml-legend');
+
+    if (!data || !data.polygons || !data.polygons.features || !data.polygons.features.length) {
+      if (badge) badge.textContent = 'NO DETECTIONS';
+      if (statusEl) statusEl.textContent = 'UNet + DBSCAN found no oil-slick clusters above the minimum area.';
+      if (legendEl) legendEl.innerHTML = '';
+      return;
+    }
+
+    // Engine / mode badge
+    const mode = data.mode === 'real' ? 'UNET (trained weights)' : 'UNET (demo mask)';
+    const dbscan = (data.dbscan_engine || '').includes('scikit-learn') ? 'DBSCAN (sk-learn)' : 'DBSCAN (fallback)';
+    if (badge) badge.textContent = `${mode} · ${dbscan}`;
+
+    // Render polygons on the Leaflet map
+    data.polygons.features.forEach((feat) => {
+      const ring = feat.geometry.coordinates[0];
+      const latlngs = ring.map(([lon, lat]) => [lat, lon]);
+      const props = feat.properties || {};
+
+      const poly = L.polygon(latlngs, ML_POLYGON_STYLE).addTo(state.layers.ml);
+      poly.bindPopup(`
+        <div style="color:#0b1220; font-size:12px; line-height:1.5; min-width:150px;">
+          <strong style="color:#B45309;">ML Spill Cluster #${props.cluster_id}</strong><br>
+          Area: <span style="font-family:monospace;">${props.area_km2} km²</span><br>
+          Confidence: <span style="font-family:monospace;">${props.confidence_pct}%</span><br>
+          Pixels: <span style="font-family:monospace;">${props.oil_pixels}</span>
+        </div>
+      `);
+    });
+
+    // Status summary
+    const biggest = data.polygons.features[0];
+    if (statusEl) {
+      statusEl.innerHTML =
+        `<strong>${data.polygons.features.length}</strong> slick cluster(s) detected ` +
+        `(total oil pixels: ${data.segmentation.oil_pixels}; ` +
+        `largest ${biggest.properties.area_km2} km² @ ${biggest.properties.centroid.map(v => v.toFixed(3)).join(', ')}).`;
+    }
+
+    // Thumbnail preview (left: raw SAR, right: segmented mask)
+    if (previewImg && data.preview_png_b64) {
+      previewImg.src = data.preview_png_b64;
+      previewImg.style.display = 'block';
+    }
+
+    // Cluster table
+    if (clustersSlot) {
+      clustersSlot.innerHTML = (data.clusters || []).slice(0, 6).map(c => `
+        <div class="ml-cluster-row">
+          <span class="mono">#${c.cluster_id}</span>
+          <span class="mono">${c.area_km2} km²</span>
+          <span class="mono" style="color: var(--amber-warning);">${c.confidence_pct}%</span>
+        </div>
+      `).join('');
+    }
+
+    if (legendEl) {
+      legendEl.innerHTML = `
+        <span style="display:inline-flex;align-items:center;gap:6px;">
+          <span style="width:12px;height:12px;background:var(--amber-warning);opacity:.85;border-radius:2px;display:inline-block;"></span>
+          UNet+DBSCAN spill polygons
+        </span>
+        <span class="ml-legend-note">Investigation support, not final proof.</span>`;
+    }
+
+    // Make sure the ML layer toggle is enabled
+    const toggle = document.getElementById('layer-toggle-ml');
+    if (toggle) {
+      toggle.classList.add('active');
+      if (state.map && !state.map.hasLayer(state.layers.ml)) {
+        state.layers.ml.addTo(state.map);
+      }
+    }
+
+    // Fly to the biggest detection
+    const firstRing = data.polygons.features[0].geometry.coordinates[0];
+    if (state.map && firstRing && firstRing.length) {
+      const bounds = L.latLngBounds(firstRing.map(([lon, lat]) => [lat, lon]));
+      state.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 11 });
+    }
+  }
+
+  async function runMLDetection() {
+    const btn = document.getElementById('btn-run-ml-detection');
+    const statusEl = document.getElementById('ml-status');
+    const badge = document.getElementById('ml-engine-badge');
+    const spill = SPILLGUARD_DATA.spills[0];
+
+    const lat = spill && Array.isArray(spill.coords) ? spill.coords[0] : 2.3812;
+    const lon = spill && Array.isArray(spill.coords) ? spill.coords[1] : 101.9124;
+
+    if (btn) btn.disabled = true;
+    if (statusEl) statusEl.textContent = 'Running UNet segmentation + DBSCAN clustering...';
+    if (badge) badge.textContent = '…';
+
+    const start = performance.now();
+    try {
+      const resp = await fetch(apiUrl(`/api/detect/demo?lat=${lat}&lon=${lon}&resolution_m=10&patch_size=256`), {
+        cache: 'no-store'
+      });
+      if (!resp.ok) throw new Error(`API returned ${resp.status}`);
+      const data = await resp.json();
+      const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+      renderMLDetections(data);
+      if (statusEl) statusEl.textContent = `Pipeline complete in ${elapsed}s.`;
+    } catch (err) {
+      console.error('ML detection failed:', err);
+      if (statusEl) {
+        statusEl.innerHTML = `Detection failed: <span class="mono">${String(err.message || err)}</span>. ` +
+          `Start the backend (uvicorn server.api:app) to enable the UNet + DBSCAN pipeline.`;
+      }
+      if (badge) badge.textContent = 'OFFLINE';
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  document.getElementById('btn-run-ml-detection')?.addEventListener('click', runMLDetection);
+
+  // Warm-up model status badge when the dashboard first appears
+  async function loadMLModelStatus() {
+    try {
+      const resp = await fetch(apiUrl('/api/detect/model'), { cache: 'no-store' });
+      if (!resp.ok) return;
+      const info = await resp.json();
+      const badge = document.getElementById('ml-engine-badge');
+      if (badge && info) {
+        badge.textContent = info.mode === 'real'
+          ? 'UNET READY · DBSCAN'
+          : (info.torch_available ? 'UNET (demo mask)' : 'UNET (demo mask)');
+        const statusEl = document.getElementById('ml-status');
+        if (statusEl && statusEl.textContent.indexOf('Idle') === 0) {
+          statusEl.textContent = info.checkpoint_exists
+            ? 'Trained UNet checkpoint loaded — segmentations use real inference.'
+            : 'No UNet checkpoint yet — demo masks simulate segmentation. Train with server/train_unet.py.';
+        }
+      }
+    } catch (e) {
+      /* backend not running; leave the idle state */
+    }
+  }
+  loadMLModelStatus();
 
   renderAnalysisPanel();
 

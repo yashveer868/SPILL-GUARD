@@ -10,6 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 try:
+    from server.ml_detector import model_status, run_detection
+except ImportError:  # pragma: no cover - optional import
+    model_status = None
+    run_detection = None
+
+try:
     from server.database import (
         add_vessel_note,
         get_vessel_notes,
@@ -62,7 +68,7 @@ def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
-    except ValueError as exc:  # pragma: no cover - validation path
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid ISO datetime: {value}") from exc
 
 
@@ -72,14 +78,9 @@ def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) ->
     lon1_rad = math.radians(lon1)
     lat2_rad = math.radians(lat2)
     lon2_rad = math.radians(lon2)
-
     delta_lat = lat2_rad - lat1_rad
     delta_lon = lon2_rad - lon1_rad
-
-    a = (
-        math.sin(delta_lat / 2) ** 2
-        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
-    )
+    a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return radius_km * c
 
@@ -89,20 +90,10 @@ def lat_lon_from_bearing(lat: float, lon: float, distance_km: float, bearing_deg
     bearing = math.radians(bearing_deg)
     lat_rad = math.radians(lat)
     lon_rad = math.radians(lon)
-
     angular_distance = distance_km / radius_km
-    new_lat = math.asin(
-        math.sin(lat_rad) * math.cos(angular_distance)
-        + math.cos(lat_rad) * math.sin(angular_distance) * math.cos(bearing)
-    )
-    new_lon = lon_rad + math.atan2(
-        math.sin(bearing) * math.sin(angular_distance) * math.cos(lat_rad),
-        math.cos(angular_distance) - math.sin(lat_rad) * math.sin(new_lat),
-    )
-    return {
-        "lat": math.degrees(new_lat),
-        "lon": (math.degrees(new_lon) + 540) % 360 - 180,
-    }
+    new_lat = math.asin(math.sin(lat_rad) * math.cos(angular_distance) + math.cos(lat_rad) * math.sin(angular_distance) * math.cos(bearing))
+    new_lon = lon_rad + math.atan2(math.sin(bearing) * math.sin(angular_distance) * math.cos(lat_rad), math.cos(angular_distance) - math.sin(lat_rad) * math.sin(new_lat))
+    return {"lat": math.degrees(new_lat), "lon": (math.degrees(new_lon) + 540) % 360 - 180}
 
 
 def dead_reckon_position(lat: float, lon: float, heading_deg: float, speed_knots: float, time_seconds: float) -> Dict[str, float]:
@@ -125,6 +116,44 @@ def startup() -> None:
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+# =============================================================================
+# ML DETECTION (UNet segmentation + DBSCAN clustering)
+# =============================================================================
+@app.get("/api/detect/model")
+def detect_model_status() -> dict:
+    """Report the availability of the UNet/DBSCAN ML stack."""
+    if model_status is None:
+        return {"error": "ml_detector module unavailable", "mode": "demo"}
+    return model_status()
+
+
+@app.get("/api/detect/demo")
+def detect_demo(
+    lat: float = Query(default=2.3812, description="Center latitude of the scan area"),
+    lon: float = Query(default=101.9124, description="Center longitude of the scan area"),
+    resolution_m: float = Query(default=10.0, ge=1.0, le=50.0, description="Ground resolution (metres per pixel)"),
+    size: int = Query(default=256, ge=64, le=512, alias="patch_size", description="Synthetic patch size (pixels)"),
+) -> dict:
+    """Run the full ML detection pipeline on a generated SAR-style scene.
+
+    Works end-to-end in demo mode even without torch/weights installed; the
+    moment a trained checkpoint is present, inference runs through the real
+    UNet. Output is returned as GeoJSON polygons plus cluster summaries ready
+    for Leaflet rendering.
+    """
+    if run_detection is None:
+        raise HTTPException(status_code=503, detail="ML detector module unavailable")
+    try:
+        return run_detection(
+            center_lat=lat,
+            center_lon=lon,
+            resolution_m=resolution_m,
+            patch_size=size,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Detection pipeline error: {exc}") from exc
 
 
 @app.get("/api/bootstrap")
@@ -472,48 +501,58 @@ def rank_suspects(payload: RankSuspectsRequest) -> dict:
 
 @app.post("/api/drift")
 def drift(payload: DriftRequest) -> dict:
-    """Estimate forward and backward drift using a simplified current-only model."""
-    if payload.hours <= 0:
-        raise HTTPException(status_code=400, detail="hours must be greater than zero")
+    """Estimate forward/backward drift and an uncertain source area."""
+    if payload.current_speed_mps < 0 or payload.wind_speed_mps < 0:
+        raise HTTPException(status_code=400, detail="Current and wind speeds cannot be negative")
+    if payload.uncertainty_km <= 0:
+        raise HTTPException(status_code=400, detail="uncertainty_km must be greater than zero")
 
-    distance_m = payload.current_speed_mps * payload.hours * 3600.0
-    forward = lat_lon_from_bearing(
-        payload.spill_lat,
-        payload.spill_lon,
-        distance_m / 1000.0,
-        payload.current_direction_degrees,
-    )
-    backward = lat_lon_from_bearing(
-        payload.spill_lat,
-        payload.spill_lon,
-        distance_m / 1000.0,
-        (payload.current_direction_degrees + 180.0) % 360.0,
-    )
+    current_bearing = math.radians(payload.current_direction_degrees % 360)
+    east_mps = payload.current_speed_mps * math.sin(current_bearing)
+    north_mps = payload.current_speed_mps * math.cos(current_bearing)
+    if payload.wind_direction_degrees is not None and payload.wind_speed_mps:
+        wind_bearing = math.radians(payload.wind_direction_degrees % 360)
+        east_mps += payload.wind_speed_mps * 0.03 * math.sin(wind_bearing)
+        north_mps += payload.wind_speed_mps * 0.03 * math.cos(wind_bearing)
+
+    effective_speed_mps = math.hypot(east_mps, north_mps)
+    effective_bearing = (math.degrees(math.atan2(east_mps, north_mps)) + 360) % 360
+    warning = "This is a simplified prototype drift estimate. Operational forecasts require detailed current, wind, wave, tide, oil-type, and weathering data."
+
+    def location_at(hours: int, reverse: bool = False) -> Dict[str, float]:
+        distance_km = effective_speed_mps * hours * 3.6
+        bearing = (effective_bearing + (180 if reverse else 0)) % 360
+        position = lat_lon_from_bearing(payload.spill_lat, payload.spill_lon, distance_km, bearing)
+        return {"lat": round(position["lat"], 6), "lon": round(position["lon"], 6)}
+
+    forward_locations = [location_at(hour) for hour in range(1, payload.hours + 1)]
+    backward_locations = [location_at(hour, reverse=True) for hour in range(1, payload.hours + 1)]
+    origin = backward_locations[-1]
+    zone_coordinates = []
+    for bearing in range(0, 360, 15):
+        point = lat_lon_from_bearing(origin["lat"], origin["lon"], payload.uncertainty_km, bearing)
+        zone_coordinates.append([round(point["lon"], 6), round(point["lat"], 6)])
+    zone_coordinates.append(zone_coordinates[0])
+
+    forward_coords = [[payload.spill_lon, payload.spill_lat]] + [[item["lon"], item["lat"]] for item in forward_locations]
+    backward_coords = [[payload.spill_lon, payload.spill_lat]] + [[item["lon"], item["lat"]] for item in backward_locations]
+    hourly = [{"hour": hour, "forward": forward_locations[hour - 1], "backward": backward_locations[hour - 1]} for hour in range(1, payload.hours + 1)]
+    forward_feature = {"type": "Feature", "properties": {"direction": "forward"}, "geometry": {"type": "LineString", "coordinates": forward_coords}}
+    backward_feature = {"type": "Feature", "properties": {"direction": "backward"}, "geometry": {"type": "LineString", "coordinates": backward_coords}}
+    zone_feature = {"type": "Feature", "properties": {"radius_km": payload.uncertainty_km}, "geometry": {"type": "Polygon", "coordinates": [zone_coordinates]}}
 
     return {
-        "forward_location": {
-            "lat": round(forward["lat"], 6),
-            "lon": round(forward["lon"], 6),
-        },
-        "backward_source_location": {
-            "lat": round(backward["lat"], 6),
-            "lon": round(backward["lon"], 6),
-        },
-        "geojson": {
-            "type": "Feature",
-            "properties": {
-                "warning": "This is a simplified prototype estimate for investigation support only.",
-            },
-            "geometry": {
-                "type": "LineString",
-                "coordinates": [
-                    [payload.spill_lon, payload.spill_lat],
-                    [backward["lon"], backward["lat"]],
-                    [forward["lon"], forward["lat"]],
-                ],
-            },
-        },
-        "warning": "Investigation support, not final proof. This is a simplified prototype estimate.",
+        "sar_time": payload.sar_time,
+        "effective_speed_mps": round(effective_speed_mps, 4),
+        "effective_direction_degrees": round(effective_bearing, 2),
+        "forward_location": forward_locations[-1],
+        "backward_source_location": origin,
+        "hourly_locations": hourly,
+        "forward_path": forward_feature,
+        "backward_path": backward_feature,
+        "origin_zone": zone_feature,
+        "geojson": {"type": "FeatureCollection", "features": [forward_feature, backward_feature, zone_feature]},
+        "warning": warning,
     }
 
 

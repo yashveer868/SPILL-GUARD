@@ -6,4 +6,11 @@ window.MAPBOX_TOKEN = '';
 // Optionally set a Mapbox style id. Default is 'mapbox/dark-v10'.
 window.MAPBOX_STYLE = 'mapbox/dark-v10';
 
+// MapTiler satellite/hybrid tiles are used when this key is configured.
+window.MAPTILER_KEY = '6Ai35tAGTZpCMYQra61M';
+
+// FastAPI origin. Keep this pointed at the backend when the site is opened
+// through Live Server or another static-file server.
+window.SPILLGUARD_API_BASE = 'http://127.0.0.1:8000';
+
 // If you prefer other providers, leave MAPBOX_TOKEN empty to use the built-in CARTO dark tiles.

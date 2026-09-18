@@ -513,6 +513,10 @@
                   <button class="btn-secondary btn-demo-data" id="btn-load-demo-data">
                     <span>Demo Data</span>
                   </button>
+                  <button class="btn-ml-detection" id="btn-run-ml-detection" title="Run UNet segmentation + DBSCAN clustering on a SAR scan">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <span>Run ML Detection</span>
+                  </button>
                 </div>
                 <div class="analysis-support-note">Investigation support, not final proof</div>
               </div>
@@ -574,6 +578,25 @@
                 </div>
               </div>
 
+              <!-- ML Detection Panel (UNet + DBSCAN results) -->
+              <div class="ml-detection-panel" id="ml-detection-panel">
+                <div class="ml-panel-header-row">
+                  <div class="ml-panel-title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="2"/></svg>
+                    <span>UNet + DBSCAN Detection</span>
+                  </div>
+                  <div class="ml-engine-badge" id="ml-engine-badge">—</div>
+                </div>
+                <div class="ml-panel-body">
+                  <div class="ml-status-line" id="ml-status">Idle — click "Run ML Detection" to segment a SAR scan</div>
+                  <div class="ml-preview-row">
+                    <img id="ml-preview-img" class="ml-preview-img" alt="UNet segmentation preview" style="display: none;">
+                    <div class="ml-clusters-slot" id="ml-clusters-slot"></div>
+                  </div>
+                  <div class="ml-legend" id="ml-legend"></div>
+                </div>
+              </div>
+
               <!-- Floating Map Layer Toggles (Top-Right) -->
               <div class="map-layer-controls">
                 <button class="layer-toggle-btn active" id="layer-toggle-slicks">SAR Slicks (3)</button>
@@ -583,6 +606,7 @@
                 <button class="layer-toggle-btn active" id="layer-toggle-corridor">Maritime Corridor</button>
                 <button class="layer-toggle-btn active" id="layer-toggle-poi">POI Features</button>
                 <button class="layer-toggle-btn active" id="layer-toggle-live-vessels">Live Vessels</button>
+                <button class="layer-toggle-btn" id="layer-toggle-ml">ML Detections</button>
               </div>
 
 
@@ -638,6 +662,20 @@
                   <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
                     Hydrodynamic drift model indicates discharge occurred 6.2 hours prior to orbital pass. Reverse trajectory coincides with Liberia-flagged tanker track.
                   </div>
+
+                  <section class="spill-analysis-card" aria-labelledby="spill-analysis-title">
+                    <div class="spill-analysis-header">
+                      <div>
+                        <div class="spill-analysis-kicker">GEOSPATIAL REVIEW</div>
+                        <h4 id="spill-analysis-title">Spill Analysis</h4>
+                      </div>
+                      <span class="spill-confidence-badge" id="spill-analysis-confidence">—</span>
+                    </div>
+                    <div class="spill-analysis-status" id="spill-analysis-status">Select a spill polygon to calculate geometry.</div>
+                    <table class="spill-analysis-table" aria-label="Spill geometry metrics">
+                      <tbody id="spill-analysis-metrics"></tbody>
+                    </table>
+                  </section>
                 </div>
 
                 <div class="drawer-actions">
@@ -689,6 +727,31 @@
               
               <!-- Column 1: Forensic Overview Card -->
               <div class="forensic-overview-col">
+                <div class="drift-controls-card">
+                  <div class="forensic-card-header">
+                    <span>Oil Drift Analysis</span>
+                    <span class="mono drift-control-status" id="drift-control-status">READY</span>
+                  </div>
+                  <div class="drift-control-grid">
+                    <label>Spill latitude<input id="drift-spill-lat" type="number" step="0.000001"></label>
+                    <label>Spill longitude<input id="drift-spill-lon" type="number" step="0.000001"></label>
+                    <label>SAR acquisition UTC<input id="drift-sar-time" type="datetime-local"></label>
+                    <label>Forecast hours<select id="drift-hours"><option value="6">6 h</option><option value="12" selected>12 h</option><option value="24">24 h</option><option value="48">48 h</option></select></label>
+                    <label>Current speed (m/s)<input id="drift-current-speed" type="number" min="0" step="0.01" value="0.4"></label>
+                    <label>Current direction (°)<input id="drift-current-direction" type="number" min="0" max="360" step="1" value="45"></label>
+                    <label>Wind speed (m/s)<input id="drift-wind-speed" type="number" min="0" step="0.01" value="0"></label>
+                    <label>Wind direction (°)<input id="drift-wind-direction" type="number" min="0" max="360" step="1" value="310"></label>
+                    <label>Origin uncertainty (km)<input id="drift-uncertainty" type="number" min="0.1" step="0.1" value="5"></label>
+                  </div>
+                  <div class="drift-control-actions">
+                    <button class="btn-secondary" id="btn-demo-ocean-conditions" type="button">Use Demo Ocean Conditions</button>
+                    <button class="btn-primary" id="btn-predict-forward-drift" type="button">Predict Forward Drift</button>
+                    <button class="btn-secondary" id="btn-estimate-source-area" type="button">Estimate Source Area</button>
+                    <button class="btn-secondary" id="btn-send-origin-vessel-analysis" type="button">Send Origin Zone to Vessel Analysis</button>
+                  </div>
+                  <div class="drift-result-summary" id="drift-result-summary">Enter conditions, then run a forecast.</div>
+                  <div class="drift-hourly-list" id="drift-hourly-list"></div>
+                </div>
                 <div class="forensic-card">
                   <div class="forensic-card-header">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>

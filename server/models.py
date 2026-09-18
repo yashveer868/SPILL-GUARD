@@ -2,7 +2,7 @@
 Pydantic Data Models for SpillGuard FastAPI Server
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 
 from pydantic import BaseModel
 
@@ -121,6 +121,10 @@ class RankSuspectsRequest(BaseModel):
 class DriftRequest(BaseModel):
     spill_lat: float
     spill_lon: float
+    sar_time: Optional[str] = None
     current_speed_mps: float
     current_direction_degrees: float
-    hours: float
+    wind_speed_mps: float = 0.0
+    wind_direction_degrees: Optional[float] = None
+    hours: Literal[6, 12, 24, 48] = 12
+    uncertainty_km: float = 5.0
