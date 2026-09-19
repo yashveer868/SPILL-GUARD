@@ -521,7 +521,11 @@
     renderEmergencyHistory();
   }
 
-  function openEmergencyPanel() {
+  async function openEmergencyPanel() {
+    if (!alertState.alerts.length) {
+      await runDemo();
+      setPanel(false);
+    }
     renderEmergencyPanel();
     const modal = document.getElementById('emergency-modal');
     modal?.classList.add('is-open'); modal?.setAttribute('aria-hidden', 'false');
