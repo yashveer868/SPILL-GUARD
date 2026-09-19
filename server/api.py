@@ -705,7 +705,7 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "id": "SG-8842",
                 "title": "Malacca Strait TSS Central Infiltration",
                 "severity": "critical",
-                "status": "UNATTRIBUTED DISCHARGE",
+                "status": "POTENTIAL OIL-LIKE ANOMALY",
                 "coords": [2.3812, 101.9124],
                 "areaKm2": 45.2,
                 "volumeBbls": 18400,
@@ -715,13 +715,13 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "wind": "14 kt NW (310°)",
                 "current": "1.8 kt SE (135°)",
                 "surfaceTemp": "29.4°C",
-                "slickType": "Heavy Crude Oil Emulsion",
+                "slickType": "Likely hydrocarbon / oil-like slick (demo classification)",
                 "thumbnail": "assets/images/sar_slick_detail.jpg",
                 "primarySuspect": {
                     "name": "MT Ocean Vanguard",
                     "imo": 9482154,
                     "confidence": 94.8,
-                    "matchType": "High Forensic Correlation"
+                    "matchType": "High prototype relevance; requires verification"
                 },
                 "slickPolygon": [
                     [2.420, 101.860],
@@ -782,7 +782,7 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "id": "SG-PG-2101",
                 "title": "Strait of Hormuz Offshore Slick",
                 "severity": "high",
-                "status": "UNDER INVESTIGATION",
+                "status": "POTENTIAL OIL-LIKE ANOMALY",
                 "coords": [26.45, 55.85],
                 "areaKm2": 18.6,
                 "volumeBbls": 5200,
@@ -792,13 +792,13 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "wind": "18 kt ENE (60°)",
                 "current": "2.1 kt N (0°)",
                 "surfaceTemp": "29.8°C",
-                "slickType": "Fuel Oil Residue",
+                "slickType": "Likely hydrocarbon / oil-like slick (demo classification)",
                 "thumbnail": "assets/images/sar_slick_detail.jpg",
                 "primarySuspect": {
                     "name": "Al Hadi Trader",
                     "imo": 9756023,
                     "confidence": 78.2,
-                    "matchType": "High Confidence"
+                    "matchType": "Candidate relevance; requires verification"
                 },
                 "slickPolygon": [
                     [26.47, 55.82],
@@ -836,7 +836,7 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "id": "SG-NS-3310",
                 "title": "Dogger Bank Slick",
                 "severity": "medium",
-                "status": "UNDER INVESTIGATION",
+                "status": "POTENTIAL OIL-LIKE ANOMALY",
                 "coords": [55.10, 3.20],
                 "areaKm2": 6.4,
                 "volumeBbls": 1200,
@@ -846,13 +846,13 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "wind": "16 kt NW (330°)",
                 "current": "1.4 kt SW (225°)",
                 "surfaceTemp": "15.6°C",
-                "slickType": "Oily Water Separator Discharge",
+                "slickType": "Likely hydrocarbon / oil-like slick (demo classification)",
                 "thumbnail": "assets/images/sar_slick_detail.jpg",
                 "primarySuspect": {
                     "name": "North Sea Carrier",
                     "imo": 9502048,
                     "confidence": 41.2,
-                    "matchType": "Secondary Candidate"
+                    "matchType": "Secondary candidate; requires verification"
                 },
                 "slickPolygon": [
                     [55.12, 3.18],
@@ -889,7 +889,7 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "id": "SG-GM-4420",
                 "title": "Mississippi Canyon Outer Slick",
                 "severity": "medium",
-                "status": "FLAGGED PRELIMINARY",
+                "status": "POTENTIAL OIL-LIKE ANOMALY",
                 "coords": [28.75, -88.35],
                 "areaKm2": 9.2,
                 "volumeBbls": 2600,
@@ -899,13 +899,13 @@ REGION_DATASETS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
                 "wind": "12 kt SSW (210°)",
                 "current": "1.9 kt WSW (250°)",
                 "surfaceTemp": "27.8°C",
-                "slickType": "Crude Oil Sheen",
+                "slickType": "Likely hydrocarbon / oil-like slick (demo classification)",
                 "thumbnail": "assets/images/sar_slick_detail.jpg",
                 "primarySuspect": {
                     "name": "Gulf Mariner",
                     "imo": 9642001,
                     "confidence": 52.4,
-                    "matchType": "Candidate Match"
+                    "matchType": "Candidate relevance; requires verification"
                 },
                 "slickPolygon": [
                     [28.77, -88.40],

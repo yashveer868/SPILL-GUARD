@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnSkipSplash = document.getElementById('btn-skip-splash');
 
   const splashSteps = [
-    { pct: 15, text: "Syncing Sentinel-1 SAR telemetry..." },
+    { pct: 15, text: "Loading SAR-style demonstration fixture..." },
     { pct: 38, text: "Calibrating VV/VH polarimetric filters..." },
     { pct: 64, text: "Streaming global AIS Class-A/B beacons..." },
     { pct: 88, text: "Initializing hydrodynamic drift model..." },
@@ -713,7 +713,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <strong>${v.name || 'Unknown Vessel'}</strong><br>
           <span style="font-family:monospace;font-size:11px;">MMSI: ${v.mmsi}</span><br>
           Speed: ${v.speed} kt &nbsp;|&nbsp; Heading: ${v.heading}°<br>
-          <span style="color:#888;font-size:10px;">Live AIS • Updated ${new Date().toLocaleTimeString()}</span>
+          <span style="color:#888;font-size:10px;">External AIS feed / simulated fallback • Updated ${new Date().toLocaleTimeString()}</span>
         </div>`
       );
     });
@@ -902,9 +902,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const miniVals = document.querySelectorAll('.priority-mini-val');
       if (miniVals && miniVals.length >= 4) {
         miniVals[0].textContent = primary.areaKm2 ? primary.areaKm2 + ' km²' : '—';
-        miniVals[1].textContent = primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '—';
-        miniVals[2].textContent = primary.confidence ? primary.confidence + '%' : '—';
-        miniVals[3].textContent = primary.primarySuspect ? primary.primarySuspect.name : '—';
+        miniVals[1].textContent = primary.volumeBbls ? 'Illustrative' : '—';
+        miniVals[2].textContent = primary.confidence ? primary.confidence + '% demo' : '—';
+        miniVals[3].textContent = primary.primarySuspect ? 'Candidate review' : '—';
       }
     } else {
       document.getElementById('priority-incident-id').textContent = 'No incidents';
@@ -921,10 +921,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('drawer-spill-title').textContent = primary.title;
       document.getElementById('drawer-sensor-tag').textContent = primary.sensor || '';
       document.getElementById('drawer-spec-area').textContent = primary.areaKm2 ? primary.areaKm2 + ' km²' : '';
-      document.getElementById('drawer-spec-volume').textContent = primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '';
-      document.getElementById('drawer-spec-conf').textContent = primary.confidence ? primary.confidence + '%' : '';
-      document.getElementById('drawer-spec-type').textContent = primary.slickType || primary.slick_type || 'Hydrocarbon oil residue';
-      document.getElementById('drawer-suspect-name').textContent = primary.primarySuspect ? `${primary.primarySuspect.name} (${primary.primarySuspect.confidence}% Match)` : '';
+      document.getElementById('drawer-spec-volume').textContent = primary.volumeBbls ? 'Illustrative estimate' : '';
+      document.getElementById('drawer-spec-conf').textContent = primary.confidence ? primary.confidence + '% demo' : '';
+      document.getElementById('drawer-spec-type').textContent = 'Not determined from SAR alone';
+      document.getElementById('drawer-suspect-name').textContent = primary.primarySuspect ? `${primary.primarySuspect.name} (potential candidate)` : '';
     }
 
     // Re-render map with region-scoped entities only.
@@ -1108,10 +1108,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('drawer-spill-title').textContent = spill.title;
     document.getElementById('drawer-sensor-tag').textContent = spill.sensor;
     document.getElementById('drawer-spec-area').textContent = spill.areaKm2 + ' km²';
-    document.getElementById('drawer-spec-volume').textContent = spill.volumeBbls.toLocaleString() + ' bbls';
-    document.getElementById('drawer-spec-conf').textContent = spill.confidence + '%';
-    document.getElementById('drawer-spec-type').textContent = spill.slickType || spill.slick_type || 'Hydrocarbon oil residue';
-    document.getElementById('drawer-suspect-name').textContent = `${spill.primarySuspect.name} (${spill.primarySuspect.confidence}% Match)`;
+    document.getElementById('drawer-spec-volume').textContent = 'Illustrative estimate';
+    document.getElementById('drawer-spec-conf').textContent = spill.confidence + '% demo';
+    document.getElementById('drawer-spec-type').textContent = 'Not determined from SAR alone';
+    document.getElementById('drawer-suspect-name').textContent = `${spill.primarySuspect.name} (potential candidate)`;
     renderSpillAnalysis(spill);
     populateDriftInputs(spill);
     
@@ -1536,7 +1536,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('btn-download-pdf')?.addEventListener('click', () => {
-    alert("Official UNCLOS / MARPOL Annex I Forensic Dossier (SHA-256 Verified) downloaded.");
+    alert("Investigation-support evidence package exported. Integrity metadata is illustrative; final legal acceptance requires authorised review.");
     dossierModal?.classList.remove('modal-active');
   });
 
@@ -2006,7 +2006,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!state.analysisData.darkWarnings.length && state.analysisData.rankings.length) {
         state.analysisData.darkWarnings = state.analysisData.rankings
           .filter(item => item.priority === 'High')
-          .map(item => `${item.vessel_name}: high-priority suspect based on proximity and AIS behaviour.`);
+          .map(item => `${item.vessel_name}: high-priority candidate based on prototype proximity and AIS evidence factors.`);
       }
 
       renderAnalysisPanel();
@@ -2053,7 +2053,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (!data || !data.polygons || !data.polygons.features || !data.polygons.features.length) {
       if (badge) badge.textContent = 'NO DETECTIONS';
-      if (statusEl) statusEl.textContent = 'UNet + DBSCAN found no oil-slick clusters above the minimum area.';
+      if (statusEl) statusEl.textContent = 'Prototype segmentation + DBSCAN found no potential anomaly clusters above the minimum area.';
       if (legendEl) legendEl.innerHTML = '';
       return;
     }
@@ -2084,7 +2084,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const biggest = data.polygons.features[0];
     if (statusEl) {
       statusEl.innerHTML =
-        `<strong>${data.polygons.features.length}</strong> slick cluster(s) detected ` +
+        `<strong>${data.polygons.features.length}</strong> potential anomaly cluster(s) detected ` +
         `(total oil pixels: ${data.segmentation.oil_pixels}; ` +
         `largest ${biggest.properties.area_km2} km² @ ${biggest.properties.centroid.map(v => v.toFixed(3)).join(', ')}).`;
     }
@@ -2110,7 +2110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       legendEl.innerHTML = `
         <span style="display:inline-flex;align-items:center;gap:6px;">
           <span style="width:12px;height:12px;background:var(--amber-warning);opacity:.85;border-radius:2px;display:inline-block;"></span>
-          UNet+DBSCAN spill polygons
+          Prototype segmentation + DBSCAN anomaly polygons
         </span>
         <span class="ml-legend-note">Investigation support, not final proof.</span>`;
     }
@@ -2142,7 +2142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const lon = spill && Array.isArray(spill.coords) ? spill.coords[1] : 101.9124;
 
     if (btn) btn.disabled = true;
-    if (statusEl) statusEl.textContent = 'Running UNet segmentation + DBSCAN clustering...';
+    if (statusEl) statusEl.textContent = 'Running prototype segmentation + DBSCAN candidate clustering...';
     if (badge) badge.textContent = '…';
 
     const start = performance.now();
