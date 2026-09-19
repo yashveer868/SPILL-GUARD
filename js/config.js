@@ -11,6 +11,8 @@ window.MAPTILER_KEY = '6Ai35tAGTZpCMYQra61M';
 
 // FastAPI origin. Keep this pointed at the backend when the site is opened
 // through Live Server or another static-file server.
-window.SPILLGUARD_API_BASE = 'http://127.0.0.1:8002';
+// Empty means "use this site's origin".  This works on Vercel and avoids
+// hard-coding a localhost API address in production.
+window.SPILLGUARD_API_BASE = window.location.origin;
 
 // If you prefer other providers, leave MAPBOX_TOKEN empty to use the built-in CARTO dark tiles.

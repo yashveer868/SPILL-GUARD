@@ -132,7 +132,66 @@
     return (hours / 24).toFixed(1) + ' days';
   }
 
-  /** Ask the backend to evaluate one reading. Returns null when the API is down. */
+  function localEvaluate(reading) {
+    const areas = SENSITIVE_AREAS[reading.region] || [];
+    const toRadians = (value) => value * Math.PI / 180;
+    const distanceKm = (lat1, lon1, lat2, lon2) => {
+      const dLat = toRadians(lat2 - lat1);
+      const dLon = toRadians(lon2 - lon1);
+      const lat1Rad = toRadians(lat1);
+      const lat2Rad = toRadians(lat2);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1Rad) * Math.cos(lat2Rad) * Math.sin(dLon / 2) ** 2;
+      return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+    const typeLabels = {
+      beach: 'Beach', port: 'Port', coral_reef: 'Coral Reef', mangrove: 'Mangrove',
+      fishing_zone: 'Fishing Zone', island: 'Island', marine_protected_area: 'Marine Protected Area'
+    };
+    const receptors = areas.map((area) => ({
+      ...area,
+      type_label: typeLabels[area.type] || area.type,
+      distance_km: Number(distanceKm(reading.spill_lat, reading.spill_lon, area.lat, area.lon).toFixed(2))
+    })).sort((a, b) => a.distance_km - b.distance_km);
+    const nearest = receptors[0] || null;
+    const distance = nearest ? nearest.distance_km : reading.distance_to_coast_km;
+    const nearReceptor = distance != null && distance <= 20;
+    const confidenceHit = reading.oil_confidence >= 75;
+    const areaHit = reading.area_km2 >= 2;
+    if (!confidenceHit && !areaHit && !nearReceptor) {
+      return { alert: false };
+    }
+
+    const hours = reading.predicted_impact_hours == null && nearReceptor && distance
+      ? distance / 1.2
+      : reading.predicted_impact_hours;
+    const severity = hours != null && hours <= 12 ? 'Critical'
+      : hours != null && hours <= 24 ? 'High'
+        : hours != null && hours <= 48 ? 'Medium' : 'Low';
+    const actions = {
+      Critical: 'Immediate escalation: task an urgent verification pass and alert the regional response centre.',
+      High: 'Verify on the next SAR pass and notify the regional response centre. Track drift toward the nearest receptor.',
+      Medium: 'Monitor and re-evaluate every 12 hours. Request a dedicated SAR revisit.',
+      Low: 'Log as an offshore low-confidence detection and continue routine monitoring.'
+    };
+    return {
+      alert: true,
+      severity,
+      severity_color: { Critical: '#FF4438', High: '#FF8A3D', Medium: '#FFB020', Low: '#2BD97C' }[severity],
+      severity_rank: { Critical: 4, High: 3, Medium: 2, Low: 1 }[severity],
+      detected_at_utc: reading.detected_at_utc || new Date().toISOString(),
+      spill: { lat: reading.spill_lat, lon: reading.spill_lon },
+      area_km2: Number(reading.area_km2.toFixed(2)),
+      oil_confidence: Number(reading.oil_confidence.toFixed(1)),
+      is_offshore: !!reading.is_offshore,
+      nearest_sensitive_area: nearest,
+      distance_to_sensitive_area_km: distance == null ? null : Number(distance.toFixed(2)),
+      predicted_impact_hours: hours == null ? null : Number(hours.toFixed(2)),
+      recommended_next_action: actions[severity],
+      disclaimer: DISCLAIMER
+    };
+  }
+
+  /** Ask the backend first, then keep demo mode functional without the API. */
   async function evaluate(reading) {
     const areas = SENSITIVE_AREAS[reading.region] || [];
     const body = {
@@ -157,7 +216,7 @@
       return await response.json();
     } catch (error) {
       console.warn('Quick Spill Alert: backend unavailable.', error);
-      return null;
+      return localEvaluate(reading);
     }
   }
 
@@ -320,7 +379,6 @@
       '</div>' +
       '<div class="alert-card-actions">' +
       '<button class="alert-btn is-map" data-act="map" data-alert-id="' + escapeHtml(alert.id) + '">Show on map</button>' +
-      ((r.severity === 'High' || r.severity === 'Critical') ? '<button class="alert-btn emergency-send-card-btn" data-act="emergency" data-alert-id="' + escapeHtml(alert.id) + '">SEND ALERT TO AUTHORITIES</button>' : '') +
       (alert.acknowledged
         ? '<span class="alert-ack-state">✓ Acknowledged</span>'
         : '<button class="alert-btn is-ack" data-act="ack" data-alert-id="' + escapeHtml(alert.id) + '">Acknowledge</button>') +
@@ -393,23 +451,41 @@
   function focusOnMap(id) {
     const alert = alertState.byId.get(id);
     const L = window.L;
-    const map = window.SpillGuardAlertsHost && window.SpillGuardAlertsHost.map;
-    if (!alert || !L || !map) return;
+    if (!alert || !L) return;
 
-    const { lat, lon } = alert.result.spill;
-    // Zoom out far enough to show the spill and any receptor context.
-    const target = alert.result.nearest_sensitive_area &&
-      alert.result.distance_to_sensitive_area_km <= 20 ? 11 : 9;
-    try {
-      map.flyTo([lat, lon], target, { duration: 0.8 });
-    } catch (e) {
-      map.setView([lat, lon], target);
+    const focus = () => {
+      const active = window.SpillGuardAlertsHost;
+      const map = active && active.map;
+      if (!map) return false;
+
+      const { lat, lon } = alert.result.spill;
+      const target = alert.result.nearest_sensitive_area &&
+        alert.result.distance_to_sensitive_area_km <= 20 ? 11 : 9;
+      try {
+        map.flyTo([lat, lon], target, { duration: 0.8 });
+      } catch (e) {
+        map.setView([lat, lon], target);
+      }
+      if (!alert.marker) flushPendingMarkers();
+      if (alert.marker && alert.marker.openPopup) {
+        setTimeout(() => {
+          try { alert.marker.openPopup(); } catch (e) { /* popup is cosmetic */ }
+        }, 850);
+      }
+      return true;
+    };
+
+    setPanel(false);
+    if (focus()) return;
+
+    // The map is lazy-loaded, so open the dashboard before retrying.
+    document.getElementById('side-btn-dashboard')?.click();
+    let attempts = 0;
+    const retry = () => {
+      if (focus() || attempts++ >= 20) return;
+      setTimeout(retry, 100);
     }
-    if (alert.marker && alert.marker.openPopup) {
-      setTimeout(() => {
-        try { alert.marker.openPopup(); } catch (e) { /* popup is cosmetic */ }
-      }, 850);
-    }
+    retry();
   }
 
   function emergencyPayload(alert) {

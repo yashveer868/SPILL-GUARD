@@ -107,11 +107,6 @@
           <span class="brand-name">Spill<span>Sense</span></span>
         </div>
 
-        <div class="nav-status-badge">
-          <span class="pulse-cyan-dot"></span>
-          <span>SAR CONSTELLATION ONLINE • 14 SENSORS</span>
-        </div>
-
         <div class="nav-links">
           <a href="#how-it-works" class="nav-link">How it Works</a>
           <a href="#matrix" class="nav-link">Forensic Advantage</a>
@@ -119,11 +114,7 @@
         </div>
 
         <div class="nav-actions">
-          <button class="btn-secondary" id="landing-login-btn">Agency Sign In</button>
-          <button class="btn-primary" id="landing-launch-btn">
-            <span>Launch Console</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
+          <button class="btn-primary" id="landing-login-btn">Agency Sign In</button>
         </div>
       </nav>
 
@@ -144,10 +135,6 @@
         </p>
 
         <div class="hero-ctas">
-          <button class="btn-primary btn-hero-primary" id="hero-demo-cta">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            <span>View Live Demo</span>
-          </button>
           <button class="btn-secondary btn-hero-secondary" id="hero-how-cta">
             <span>How it Works</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>
@@ -583,31 +570,6 @@
                 <div class="analysis-support-note">Investigation support, not final proof</div>
               </div>
 
-                <!-- SAR–AIS Correlation Card -->
-                <div class="correlation-card" style="position:absolute; right:24px; top:120px; width:360px; z-index:520;">
-                  <div style="background:rgba(8,18,32,0.9); border:1px solid var(--cyan-border); padding:12px; border-radius:8px; box-shadow:var(--shadow-card);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                      <div style="font-weight:700; color:var(--cyan-primary);">SAR–AIS Correlation</div>
-                      <div id="correlation-status" style="font-family:var(--font-mono); font-size:12px; color:var(--green-safe);">Idle</div>
-                    </div>
-
-                    <div style="display:flex; gap:8px; margin-bottom:8px;">
-                      <button class="btn-primary" id="btn-run-correlation" style="flex:1;">Run Correlation</button>
-                      <button class="btn-secondary" id="btn-demo-correlation" style="flex:1;">Demo</button>
-                    </div>
-
-                    <div style="max-height:220px; overflow:auto; background:rgba(3,6,10,0.45); border-radius:6px; padding:6px;">
-                      <table id="correlation-results" style="width:100%; font-size:12px; color:var(--text-primary); border-collapse:collapse;">
-                        <thead style="color:var(--text-muted); font-family:var(--font-mono); font-size:11px;">
-                          <tr><th style="text-align:left; padding:6px">MMSI</th><th style="text-align:right; padding:6px">Score</th><th style="text-align:right; padding:6px">Dist km</th></tr>
-                        </thead>
-                        <tbody></tbody>
-                      </table>
-                    </div>
-                    <div style="margin-top:8px; font-size:11px; color:var(--text-muted);">Warning: investigation support only.</div>
-                  </div>
-                </div>
-
               <!-- New Analysis Output Panel -->
               <div class="analysis-info-panel" id="analysis-info-panel">
                 <div class="analysis-panel-header">
@@ -663,12 +625,6 @@
               <div class="map-layer-controls">
                 <button class="layer-toggle-btn active" id="layer-toggle-slicks">SAR Slicks (3)</button>
                 <button class="layer-toggle-btn active" id="layer-toggle-ais">AIS Tracks (7)</button>
-                <button class="layer-toggle-btn active" id="layer-toggle-drift">Drift Vectors</button>
-                <button class="layer-toggle-btn" id="layer-toggle-eez">EEZ Borders</button>
-                <button class="layer-toggle-btn active" id="layer-toggle-corridor">Maritime Corridor</button>
-                <button class="layer-toggle-btn active" id="layer-toggle-poi">POI Features</button>
-                <button class="layer-toggle-btn active" id="layer-toggle-live-vessels">Live Vessels</button>
-                <button class="layer-toggle-btn" id="layer-toggle-ml">ML Detections</button>
               </div>
 
 
@@ -861,7 +817,7 @@
                     <canvas id="drift-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
                     
                     <!-- Overlaid Legend HUD -->
-                    <div style="position: absolute; bottom: 16px; left: 16px; background: rgba(5, 11, 20, 0.88); backdrop-filter: blur(8px); border: 1px solid var(--cyan-border); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 11px; font-family: var(--font-mono);">
+                    <div style="position: absolute; top: 16px; left: 16px; background: rgba(5, 11, 20, 0.88); backdrop-filter: blur(8px); border: 1px solid var(--cyan-border); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 11px; font-family: var(--font-mono);">
                       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
                         <span style="width: 12px; height: 12px; background: var(--red-alert); border-radius: 2px;"></span>
                         <span>Current Slick Position (Sentinel-1A SAR)</span>

@@ -564,29 +564,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       '<span style="font-family:monospace;font-size:11px;">Traffic Separation Scheme</span></div>'
     );
 
-    // ---- 2. Orange Circular Waypoints along the corridor ----
-    const waypointData = overlays.waypoints || [];
-
-    waypointData.forEach(wp => {
-      const marker = L.circleMarker(wp.coords, {
-        radius: 7,
-        color: '#FFFFFF',
-        weight: 2,
-        opacity: 1,
-        fillColor: '#FF9900',
-        fillOpacity: 0.9,
-        className: 'corridor-waypoint'
-      }).addTo(state.layers.waypoints);
-
-      marker.bindTooltip(wp.label, {
-        permanent: false,
-        direction: 'top',
-        offset: [0, -10],
-        className: 'sg-waypoint-tooltip'
-      });
-    });
-
-    // ---- 3. Red Polygonal Priority Monitoring Zone ----
+    // ---- 2. Red Polygonal Priority Monitoring Zone ----
     const priorityZone = L.polygon(overlays.priorityZone || [], {
       color: '#FF4438',
       weight: 2.5,
@@ -604,7 +582,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       '<span style="font-family:monospace;font-size:11px;">High vessel traffic density</span></div>'
     );
 
-    // ---- 4. Cyan Intersecting Line (Point of Interest / SAR intercept) ----
+    // ---- 3. Cyan Intersecting Line (Point of Interest / SAR intercept) ----
     const cyanLine = L.polyline(overlays.sarVector || [], {
       color: '#00D4FF',
       weight: 3,
@@ -637,18 +615,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       className: 'sg-poi-tooltip'
     });
 
-    // ---- 5. Geographic Labels ----
-    (overlays.labels || []).forEach(label => {
-      const mapLabel = L.marker(label.coords, {
-        interactive: false,
-      icon: L.divIcon({
-        className: 'sg-map-label',
-        html: `<span class="sg-label-text">${label.text}</span>`,
-        iconSize: [140, 28],
-        iconAnchor: [70, 14]
-      })
-      }).addTo(state.layers.poiFeatures);
-    });
   }
 
 
