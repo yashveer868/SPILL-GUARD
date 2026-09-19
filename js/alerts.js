@@ -544,7 +544,6 @@
     const body = document.getElementById('emergency-confirm-body');
     if (body) body.innerHTML = `<div class="emergency-review-grid">${[['Alert ID',p.alertId],['Location',p.location],['Severity / area',p.severity + ' / ' + p.area],['Detection time',p.detected],['AI confidence',p.confidence],['Potential Source Vessel(s)',p.vessel],['Nearby coastal areas at risk',p.coastalRisk],['Current drift direction',p.drift]].map(([label,value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}</div><p class="emergency-disclaimer">AI detection only. Potential source vessels require verification. Field verification is required before legal or operational conclusions.</p><div class="emergency-message-preview">SMS preview: Possible oil slick at ${escapeHtml(p.location)}. Severity ${escapeHtml(p.severity)}, estimated area ${escapeHtml(p.area)}, detected ${escapeHtml(p.detected)}. Drift: ${escapeHtml(p.drift)}. Alert ID ${escapeHtml(p.alertId)}. ${escapeHtml(p.reportLink)}</div>`;
     document.getElementById('emergency-send-sms').disabled = false;
-    document.getElementById('emergency-send-official').disabled = false;
     document.getElementById('emergency-confirm-status').textContent = '';
     document.getElementById('emergency-confirm-modal')?.classList.add('is-open');
   }
@@ -578,7 +577,6 @@
       ? `SIMULATED ALERT SENT · DEMO MODE · ${record.time}`
       : `Alert successfully sent to authorities. ${record.time} · ${record.recipient} · ${method} · ${record.status}`;
     document.getElementById('emergency-send-sms').disabled = true;
-    document.getElementById('emergency-send-official').disabled = true;
     renderEmergencyPanel();
   }
 
