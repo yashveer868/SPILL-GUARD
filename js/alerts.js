@@ -94,6 +94,8 @@
     byId: new Map()
   };
 
+  const emergencyState = { selected: null, history: JSON.parse(localStorage.getItem('spillguard-emergency-history') || '[]') };
+
   let seq = 0;
 
   function uid() {
@@ -318,6 +320,7 @@
       '</div>' +
       '<div class="alert-card-actions">' +
       '<button class="alert-btn is-map" data-act="map" data-alert-id="' + escapeHtml(alert.id) + '">Show on map</button>' +
+      ((r.severity === 'High' || r.severity === 'Critical') ? '<button class="alert-btn emergency-send-card-btn" data-act="emergency" data-alert-id="' + escapeHtml(alert.id) + '">SEND ALERT TO AUTHORITIES</button>' : '') +
       (alert.acknowledged
         ? '<span class="alert-ack-state">✓ Acknowledged</span>'
         : '<button class="alert-btn is-ack" data-act="ack" data-alert-id="' + escapeHtml(alert.id) + '">Acknowledge</button>') +
@@ -409,6 +412,106 @@
     }
   }
 
+  function emergencyPayload(alert) {
+    const r = alert.result;
+    const vessel = SPILLGUARD_DATA.vessels?.find((item) => item.riskLevel === 'CRITICAL' || item.riskScore >= 85);
+    return {
+      alertId: alert.id,
+      location: `${r.spill.lat.toFixed(4)}°, ${r.spill.lon.toFixed(4)}°`,
+      area: `${r.area_km2} km²`,
+      severity: r.severity.toUpperCase(),
+      detected: formatUtc(r.detected_at_utc),
+      confidence: `${r.oil_confidence}%`,
+      vessel: vessel ? `${vessel.name} · Potential Source Vessel · Requires verification` : 'No potential source vessel available',
+      coastalRisk: r.nearest_sensitive_area ? `${r.nearest_sensitive_area.name} · ${r.distance_to_sensitive_area_km} km` : 'No nearby coastal area in model range',
+      drift: 'Current drift direction requires operational verification',
+      reportLink: `${location.origin}/#incident-${encodeURIComponent(alert.id)}`
+    };
+  }
+
+  function renderEmergencyHistory() {
+    const history = document.getElementById('emergency-history-list');
+    if (!history) return;
+    history.innerHTML = emergencyState.history.length ? emergencyState.history.map((item, index) =>
+      `<button type="button" class="emergency-history-item" data-history-index="${index}"><strong>${escapeHtml(item.alertId)}</strong><span>${escapeHtml(item.time)}</span><span>${escapeHtml(item.recipient)}</span><b>${escapeHtml(item.status)}</b></button>`
+    ).join('') : '<div class="emergency-empty">No transmissions recorded.</div>';
+  }
+
+  function renderEmergencyPanel() {
+    const active = document.getElementById('emergency-active-list');
+    if (!active) return;
+    const alerts = sortedAlerts().filter((item) => item.result.severity === 'High' || item.result.severity === 'Critical');
+    active.innerHTML = alerts.length ? alerts.map((item) => `<div class="emergency-active-item"><span class="alert-sev-badge">${escapeHtml(item.result.severity)}</span><div><strong>OIL SPILL ALERT</strong><small>${escapeHtml(item.label)} · ${escapeHtml(formatUtc(item.result.detected_at_utc))}</small></div><button class="alert-btn emergency-send-card-btn" data-emergency-id="${escapeHtml(item.id)}">SEND ALERT TO AUTHORITIES</button></div>`).join('') : '<div class="emergency-empty">No High or Critical possible oil-slick alerts are active.</div>';
+    renderEmergencyHistory();
+  }
+
+  function openEmergencyPanel() {
+    renderEmergencyPanel();
+    const modal = document.getElementById('emergency-modal');
+    modal?.classList.add('is-open'); modal?.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeEmergencyPanel() {
+    const modal = document.getElementById('emergency-modal');
+    modal?.classList.remove('is-open'); modal?.setAttribute('aria-hidden', 'true');
+  }
+
+  function openEmergencyConfirm(id) {
+    const alert = alertState.byId.get(id);
+    if (!alert) return;
+    emergencyState.selected = alert;
+    const p = emergencyPayload(alert);
+    const body = document.getElementById('emergency-confirm-body');
+    if (body) body.innerHTML = `<div class="emergency-review-grid">${[['Alert ID',p.alertId],['Location',p.location],['Severity / area',p.severity + ' / ' + p.area],['Detection time',p.detected],['AI confidence',p.confidence],['Potential Source Vessel(s)',p.vessel],['Nearby coastal areas at risk',p.coastalRisk],['Current drift direction',p.drift]].map(([label,value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}</div><p class="emergency-disclaimer">AI detection only. Potential source vessels require verification. Field verification is required before legal or operational conclusions.</p><div class="emergency-message-preview">SMS preview: Possible oil slick at ${escapeHtml(p.location)}. Severity ${escapeHtml(p.severity)}, estimated area ${escapeHtml(p.area)}, detected ${escapeHtml(p.detected)}. Drift: ${escapeHtml(p.drift)}. Alert ID ${escapeHtml(p.alertId)}. ${escapeHtml(p.reportLink)}</div>`;
+    document.getElementById('emergency-send-sms').disabled = false;
+    document.getElementById('emergency-send-official').disabled = false;
+    document.getElementById('emergency-confirm-status').textContent = '';
+    document.getElementById('emergency-confirm-modal')?.classList.add('is-open');
+  }
+
+  function closeEmergencyConfirm() { document.getElementById('emergency-confirm-modal')?.classList.remove('is-open'); }
+
+  async function transmitEmergency(method) {
+    const alert = emergencyState.selected;
+    if (!alert) return;
+    const payload = emergencyPayload(alert);
+    const statusElement = document.getElementById('emergency-confirm-status');
+    const button = document.getElementById(method === 'SMS' ? 'emergency-send-sms' : 'emergency-send-official');
+    if (button) button.disabled = true;
+    if (statusElement) statusElement.textContent = 'Transmitting alert…';
+    let result;
+    try {
+      const response = await fetch(apiUrl('/api/emergency-alerts/transmit'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method, ...payload })
+      });
+      result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || 'Emergency transmission is not configured.');
+    } catch (error) {
+      if (button) button.disabled = false;
+      if (statusElement) statusElement.textContent = error.message || 'Emergency transmission failed.';
+      return;
+    }
+    const record = { ...payload, time: formatUtc(new Date().toISOString()), recipient: 'Configured Maritime Authority Group', method, status: result.status, incidentStatus: 'Awaiting field verification' };
+    emergencyState.history.unshift(record); emergencyState.history = emergencyState.history.slice(0, 25); localStorage.setItem('spillguard-emergency-history', JSON.stringify(emergencyState.history));
+    document.getElementById('emergency-confirm-status').textContent = record.status === 'SIMULATED SENT'
+      ? `SIMULATED ALERT SENT · DEMO MODE · ${record.time}`
+      : `Alert successfully sent to authorities. ${record.time} · ${record.recipient} · ${method} · ${record.status}`;
+    document.getElementById('emergency-send-sms').disabled = true;
+    document.getElementById('emergency-send-official').disabled = true;
+    renderEmergencyPanel();
+  }
+
+  function openHistoryDetail(index) {
+    const record = emergencyState.history[index];
+    if (!record) return;
+    const body = document.getElementById('emergency-confirm-body');
+    if (body) body.innerHTML = `<div class="emergency-review-grid">${[['Alert ID',record.alertId],['Location',record.location],['Severity / area',record.severity + ' / ' + record.area],['Detection time',record.detected],['AI confidence',record.confidence],['Potential Source Vessel(s)',record.vessel],['Nearby coastal areas at risk',record.coastalRisk],['Current drift direction',record.drift],['Recipient authority',record.recipient],['Transmission method',record.method],['Transmission status',record.status],['Incident status',record.incidentStatus]].map(([label,value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}</div><p class="emergency-disclaimer">AI detection only. Potential source vessels require verification. Field verification is required before legal or operational conclusions.</p>`;
+    document.getElementById('emergency-confirm-status').textContent = 'Historical transmission record';
+    document.getElementById('emergency-confirm-modal')?.classList.add('is-open');
+  }
+
   // --- Panel controls ------------------------------------------------------
   function setPanel(open) {
     const panel = document.getElementById('alert-panel');
@@ -461,6 +564,12 @@
       setPanel(!alertState.isOpen);
     });
     document.getElementById('alert-panel-close')?.addEventListener('click', () => setPanel(false));
+    document.getElementById('emergency-alerts-btn')?.addEventListener('click', openEmergencyPanel);
+    document.getElementById('emergency-close')?.addEventListener('click', closeEmergencyPanel);
+    document.getElementById('emergency-confirm-close')?.addEventListener('click', closeEmergencyConfirm);
+    document.getElementById('emergency-confirm-cancel')?.addEventListener('click', closeEmergencyConfirm);
+    document.getElementById('emergency-send-sms')?.addEventListener('click', () => transmitEmergency('SMS'));
+    document.getElementById('emergency-send-official')?.addEventListener('click', () => transmitEmergency('OFFICIAL CHANNEL'));
     document.getElementById('btn-alert-demo')?.addEventListener('click', runDemo);
     document.getElementById('btn-alert-ack-all')?.addEventListener('click', () => {
       alertState.alerts.forEach((a) => { a.acknowledged = true; });
@@ -483,6 +592,15 @@
       const id = button.getAttribute('data-alert-id');
       if (button.getAttribute('data-act') === 'ack') acknowledge(id);
       else if (button.getAttribute('data-act') === 'map') focusOnMap(id);
+      else if (button.getAttribute('data-act') === 'emergency') openEmergencyConfirm(id);
+    });
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-emergency-id]');
+      if (button) openEmergencyConfirm(button.getAttribute('data-emergency-id'));
+    });
+    document.getElementById('emergency-history-list')?.addEventListener('click', (event) => {
+      const item = event.target.closest('[data-history-index]');
+      if (item) openHistoryDetail(Number(item.getAttribute('data-history-index')));
     });
 
     // Escape closes the panel — same as the existing drawer convention.

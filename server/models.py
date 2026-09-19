@@ -4,7 +4,7 @@ Pydantic Data Models for SpillGuard FastAPI Server
 
 from typing import Any, Dict, List, Optional, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PrimarySuspectModel(BaseModel):
@@ -36,6 +36,14 @@ class SpillCreateModel(BaseModel):
 class VesselNoteCreate(BaseModel):
     note: str
     author: Optional[str] = "Command Analyst"
+
+
+class FeedbackCreate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    feedback_type: str
+    rating: int = Field(..., ge=1, le=5)
+    message: str
 
 
 class VesselFlagUpdate(BaseModel):

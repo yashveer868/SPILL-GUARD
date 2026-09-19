@@ -24,6 +24,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     regionRequestId: 0,
     selectedSpill: SPILLGUARD_DATA.spills[0],
     selectedVesselFilter: 'all',
+    masterVessels: Array.isArray(SPILLGUARD_DATA.vessels) ? [...SPILLGUARD_DATA.vessels] : [],
+    masterSpills: Array.isArray(SPILLGUARD_DATA.spills) ? [...SPILLGUARD_DATA.spills] : [],
     isPlayingScrubber: false,
     scrubberInterval: null,
     scrubberSpeed: 1,
@@ -51,6 +53,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     },
     liveVesselInterval: null
   };
+
+  state.masterVessels = Array.isArray(SPILLGUARD_DATA.vessels) ? [...SPILLGUARD_DATA.vessels] : [];
+  state.masterSpills = Array.isArray(SPILLGUARD_DATA.spills) ? [...SPILLGUARD_DATA.spills] : [];
 
   const screens = [
     'screen-splash',
@@ -306,7 +311,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       center: reg.center,
       zoom: reg.zoom,
       zoomControl: true,
-      attributionControl: true,
+      attributionControl: false,
       scrollWheelZoom: true,
       preferCanvas: true
     });
@@ -347,13 +352,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }).addTo(state.map);
       console.warn('Map tiles failed, falling back to CARTO:', e);
     }
-
-    L.control.scale({
-      position: 'bottomleft',
-      metric: true,
-      imperial: false,
-      maxWidth: 120
-    }).addTo(state.map);
 
     state.layers.slicks = L.layerGroup().addTo(state.map);
     state.layers.ais = L.layerGroup().addTo(state.map);
@@ -916,10 +914,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     const region = SPILLGUARD_DATA.regions[regionKey];
     if (!region || !validateRegionConfig(regionKey, region)) return;
     const { spills, vessels } = getEntitiesForRegion(regionKey);
-    SPILLGUARD_DATA.spills = spills;
-    SPILLGUARD_DATA.vessels = vessels;
+    const activeSpills = Array.isArray(spills) ? spills : [];
+    const activeVessels = Array.isArray(vessels) ? vessels : [];
+
+    // Preserve the canonical vessel/spill catalog for the table and filter UI.
+    // Region updates should only affect the live map and cards, not the master table data.
+    if (!state.masterVessels.length && Array.isArray(SPILLGUARD_DATA.vessels)) {
+      state.masterVessels = [...SPILLGUARD_DATA.vessels];
+    }
+    if (!state.masterSpills.length && Array.isArray(SPILLGUARD_DATA.spills)) {
+      state.masterSpills = [...SPILLGUARD_DATA.spills];
+    }
+
     if (state.layers.liveVessels) state.layers.liveVessels.clearLayers();
-    const primary = spills[0];
+    const primary = activeSpills[0];
     // Priority card
     const idEl = document.getElementById('priority-zone-card');
     if (primary) {
@@ -953,9 +961,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('drawer-suspect-name').textContent = primary.primarySuspect ? `${primary.primarySuspect.name} (${primary.primarySuspect.confidence}% Match)` : '';
     }
 
-    // Re-render map with filtered entities
+    // Re-render map with region-scoped entities only.
     if (state.map) {
-      renderMapData(spills, vessels);
+      renderMapData(activeSpills, activeVessels);
       renderMaritimeCorridor();
       if (region.bounds) state.map.fitBounds(region.bounds, { padding: [24, 24], maxZoom: region.zoom });
       else state.map.flyTo(region.center, region.zoom, { duration: 1.2 });
@@ -1566,8 +1574,103 @@ document.addEventListener('DOMContentLoaded', async () => {
     dossierModal?.classList.remove('modal-active');
   });
 
-  document.getElementById('btn-issue-interpol-alert')?.addEventListener('click', () => {
-    alert("INTERPOL Purple Notice transmitted for MT Ocean Vanguard (IMO 9482154). Marine pollution alert dispatched to regional port state authorities.");
+  // Feedback modal and form handling
+  const feedbackModal = document.getElementById('feedback-modal');
+  const feedbackForm = document.getElementById('feedback-form');
+  const feedbackStatus = document.getElementById('feedback-status');
+  const feedbackRatingInput = document.getElementById('feedback-rating');
+  const feedbackStars = document.querySelectorAll('.feedback-star-btn');
+
+  function openFeedbackModal() {
+    feedbackModal?.classList.add('modal-active');
+    feedbackStatus?.classList.remove('success', 'error');
+    feedbackStatus && (feedbackStatus.textContent = '');
+  }
+
+  function closeFeedbackModal() {
+    feedbackModal?.classList.remove('modal-active');
+    feedbackStatus?.classList.remove('success', 'error');
+    feedbackStatus && (feedbackStatus.textContent = '');
+    feedbackForm?.reset();
+    const currentRating = Number(feedbackRatingInput?.value || 3);
+    feedbackStars.forEach(star => {
+      const value = Number(star.dataset.value);
+      star.classList.toggle('active', value <= currentRating);
+    });
+  }
+
+  document.getElementById('nav-feedback-btn')?.addEventListener('click', openFeedbackModal);
+  document.querySelectorAll('[data-close-feedback]').forEach(btn => {
+    btn.addEventListener('click', closeFeedbackModal);
+  });
+
+  feedbackStars.forEach(star => {
+    star.addEventListener('click', () => {
+      const selected = Number(star.dataset.value || 1);
+      feedbackRatingInput.value = selected;
+      feedbackStars.forEach(item => {
+        item.classList.toggle('active', Number(item.dataset.value) <= selected);
+      });
+    });
+  });
+
+  feedbackForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const formData = new FormData(feedbackForm);
+    const message = String(formData.get('message') || '').trim();
+    const rating = Number(formData.get('rating') || 0);
+    const payload = {
+      name: String(formData.get('name') || '').trim() || null,
+      email: String(formData.get('email') || '').trim() || null,
+      feedback_type: String(formData.get('feedback_type') || 'General Feedback'),
+      rating,
+      message,
+    };
+
+    if (!message) {
+      feedbackStatus?.classList.remove('success');
+      feedbackStatus?.classList.add('error');
+      feedbackStatus.textContent = 'Please enter your feedback message before submitting.';
+      return;
+    }
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      feedbackStatus?.classList.remove('success');
+      feedbackStatus?.classList.add('error');
+      feedbackStatus.textContent = 'Please select a rating between 1 and 5.';
+      return;
+    }
+
+    try {
+      const response = await fetch(apiUrl('/api/feedback'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result.detail || 'Unable to save feedback.');
+      }
+
+      feedbackStatus?.classList.remove('error');
+      feedbackStatus?.classList.add('success');
+      feedbackStatus.textContent = 'Thank you for your feedback!';
+      feedbackForm.reset();
+      feedbackRatingInput.value = '3';
+      feedbackStars.forEach(star => {
+        const value = Number(star.dataset.value);
+        star.classList.toggle('active', value <= 3);
+      });
+
+      setTimeout(() => closeFeedbackModal(), 1800);
+    } catch (error) {
+      feedbackStatus?.classList.remove('success');
+      feedbackStatus?.classList.add('error');
+      feedbackStatus.textContent = error.message || 'Something went wrong while submitting your feedback.';
+    }
   });
 
 
@@ -1580,41 +1683,47 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const searchTerm = (document.getElementById('vessel-search-input')?.value || '').toLowerCase();
     const filter = state.selectedVesselFilter;
+    const vesselCatalog = Array.isArray(state.masterVessels) && state.masterVessels.length
+      ? state.masterVessels
+      : Array.isArray(SPILLGUARD_DATA.vessels)
+        ? SPILLGUARD_DATA.vessels
+        : [];
 
-    const filtered = SPILLGUARD_DATA.vessels.filter(v => {
-      // Search filter
-      const matchesSearch = v.name.toLowerCase().includes(searchTerm) ||
-                            v.imo.toString().includes(searchTerm) ||
-                            v.flag.toLowerCase().includes(searchTerm) ||
-                            v.type.toLowerCase().includes(searchTerm);
+    const filtered = vesselCatalog.filter(v => {
+      const vesselName = String(v.name || '').toLowerCase();
+      const vesselType = String(v.type || '').toLowerCase();
+      const vesselFlag = String(v.flag || '').toLowerCase();
+      const matchesSearch = vesselName.includes(searchTerm) ||
+                            String(v.imo || '').includes(searchTerm) ||
+                            vesselFlag.includes(searchTerm) ||
+                            vesselType.includes(searchTerm);
 
       if (!matchesSearch) return false;
 
-      // Category filter
-      if (filter === 'dark') return v.isDarkVessel;
-      if (filter === 'tankers') return v.type.toLowerCase().includes('tanker') || v.type.toLowerCase().includes('carrier');
-      if (filter === 'high-risk') return v.riskScore > 70;
+      if (filter === 'dark') return Boolean(v.isDarkVessel);
+      if (filter === 'tankers') return vesselType.includes('tanker') || vesselType.includes('carrier');
+      if (filter === 'high-risk') return Number(v.riskScore || 0) > 70;
       return true;
     });
 
     tbody.innerHTML = filtered.map(v => `
       <tr>
         <td>
-          <div style="font-weight: 600; color: #FFF;">${v.name}</div>
-          <div class="mono" style="font-size: 11px; color: var(--text-muted);">IMO ${v.imo} • MMSI ${v.mmsi}</div>
+          <div style="font-weight: 600; color: #FFF;">${v.name || 'Unknown Vessel'}</div>
+          <div class="mono" style="font-size: 11px; color: var(--text-muted);">IMO ${v.imo || '—'} • MMSI ${v.mmsi || '—'}</div>
         </td>
         <td>
           <span style="display: flex; align-items: center; gap: 6px;">
-            <span>${v.flag}</span>
+            <span>${v.flag || 'Unknown'}</span>
           </span>
         </td>
-        <td>${v.type}</td>
-        <td class="mono" style="font-size: 12px;">${v.lastAisPing}</td>
+        <td>${v.type || 'Unknown'}</td>
+        <td class="mono" style="font-size: 12px;">${v.lastAisPing || '—'}</td>
         <td>
           ${v.isDarkVessel ? `
             <span class="dark-vessel-badge">
               <span class="pulse-cyan-dot" style="background: var(--red-alert); box-shadow: 0 0 6px var(--red-alert);"></span>
-              ${v.darkDuration}
+              ${v.darkDuration || 'Dark vessel'}
             </span>
           ` : `
             <span class="safe-vessel-badge">
@@ -1623,15 +1732,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             </span>
           `}
         </td>
-        <td class="mono" style="font-size: 12px;">${v.speed} kt / ${v.heading}°</td>
+        <td class="mono" style="font-size: 12px;">${v.speed ?? '—'} kt / ${v.heading ?? '—'}°</td>
         <td>
-          <span class="mono" style="font-weight: 700; color: ${v.riskScore > 75 ? 'var(--red-alert)' : v.riskScore > 40 ? 'var(--amber-warning)' : 'var(--green-safe)'};">
-            ${v.riskScore}/100
+          <span class="mono" style="font-weight: 700; color: ${Number(v.riskScore || 0) > 75 ? 'var(--red-alert)' : Number(v.riskScore || 0) > 40 ? 'var(--amber-warning)' : 'var(--green-safe)'};">
+            ${Number(v.riskScore || 0)}/100
           </span>
         </td>
         <td>
           ${v.isDarkVessel ? `
-            <button class="btn-secondary btn-inspect-vessel" data-imo="${v.imo}" style="padding: 4px 10px; font-size: 11px; border-color: var(--red-border); color: var(--red-alert);">
+            <button class="btn-secondary btn-inspect-vessel" data-imo="${v.imo || ''}" style="padding: 4px 10px; font-size: 11px; border-color: var(--red-border); color: var(--red-alert);">
               Investigate Anomaly →
             </button>
           ` : `

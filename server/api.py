@@ -1,6 +1,9 @@
 """SpillGuard HTTP API and static-site server."""
 
 import math
+import json
+import os
+from urllib.request import Request, urlopen
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -39,9 +42,11 @@ try:
         query_spill_by_id,
         query_spills,
         query_vessels,
+        save_feedback,
     )
     from server.models import (
         DriftRequest,
+        FeedbackCreate,
         MatchVesselsRequest,
         RankSuspectsRequest,
         VesselNoteCreate,
@@ -58,9 +63,11 @@ except ImportError:  # pragma: no cover - fallback for direct script execution
         query_spill_by_id,
         query_spills,
         query_vessels,
+        save_feedback,
     )
     from models import (
         DriftRequest,
+        FeedbackCreate,
         MatchVesselsRequest,
         RankSuspectsRequest,
         VesselNoteCreate,
@@ -132,6 +139,38 @@ def startup() -> None:
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/api/emergency-alerts/transmit")
+def transmit_emergency_alert(payload: Dict[str, Any]) -> dict:
+    method = str(payload.get("method", "")).upper()
+    if method not in {"SMS", "OFFICIAL CHANNEL"}:
+        raise HTTPException(status_code=400, detail="Unsupported emergency transmission method.")
+
+    mode = os.getenv("EMERGENCY_ALERT_MODE", "demo").strip().lower()
+    if mode == "demo":
+        return {"status": "SIMULATED SENT", "mode": "demo", "method": method}
+    if mode != "production":
+        raise HTTPException(status_code=500, detail="Emergency alert mode is invalid.")
+
+    endpoint_name = "EMERGENCY_SMS_WEBHOOK_URL" if method == "SMS" else "EMERGENCY_OFFICIAL_WEBHOOK_URL"
+    endpoint = os.getenv(endpoint_name, "")
+    if not endpoint.startswith("https://"):
+        raise HTTPException(status_code=503, detail=f"{method} delivery is not configured. Set {endpoint_name} to an HTTPS gateway.")
+
+    request = Request(
+        endpoint,
+        data=json.dumps({"method": method, "payload": payload}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            if response.status < 200 or response.status >= 300:
+                raise RuntimeError(f"Gateway returned {response.status}")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Configured emergency gateway failed.") from exc
+    return {"status": "SENT", "mode": "production", "method": method}
 
 
 # =============================================================================
@@ -576,6 +615,39 @@ def drift(payload: DriftRequest) -> dict:
 # =============================================================================
 # QUICK SPILL ALERT
 # =============================================================================
+@app.post("/api/feedback", status_code=201)
+def submit_feedback(payload: FeedbackCreate) -> dict:
+    """Persist user feedback to the existing PostgreSQL database."""
+    message = (payload.message or '').strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Feedback message is required.")
+
+    feedback_type = (payload.feedback_type or '').strip()
+    valid_types = {
+        "Bug Report",
+        "Feature Request",
+        "User Experience",
+        "General Feedback",
+    }
+    if not feedback_type or feedback_type not in valid_types:
+        raise HTTPException(status_code=400, detail="Invalid feedback type.")
+
+    name = payload.name.strip() if payload.name else None
+    email = payload.email.strip() if payload.email else None
+
+    try:
+        saved = save_feedback(
+            name=name,
+            email=email,
+            feedback_type=feedback_type,
+            rating=int(payload.rating),
+            message=message,
+        )
+        return {"success": True, "message": "Thank you for your feedback!", "data": saved}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unable to save feedback right now. Please try again later.")
+
+
 @app.post("/api/alerts/evaluate")
 def alerts_evaluate(payload: QuickAlertEvaluateRequest) -> dict:
     """Evaluate one SAR slick reading and return a Quick Spill Alert.

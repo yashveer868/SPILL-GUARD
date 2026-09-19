@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SpillGuard — AI Satellite SAR Oil Spill Detection & AIS Maritime Forensics</title>
+  <title>SpillSense — AI Satellite SAR Oil Spill Detection & AIS Maritime Forensics</title>
   <meta name="description" content="AI-powered command-center detecting ocean oil spills from Synthetic Aperture Radar (SAR) satellite imagery and identifying responsible vessels via AIS tracking data.">
   
   <!-- Google Fonts: Space Grotesk, Inter, JetBrains Mono -->
@@ -26,7 +26,7 @@
   <nav id="proto-quick-nav" aria-label="Prototype Screen Navigator">
     <div class="proto-label">
       <span class="proto-dot"></span>
-      <span>SpillGuard Flow:</span>
+      <span>SpillSense Flow:</span>
     </div>
     <button class="proto-btn active" data-target="screen-splash" id="nav-btn-splash">1. Splash</button>
     <button class="proto-btn" data-target="screen-landing" id="nav-btn-landing">2. Landing</button>
@@ -76,7 +76,7 @@
         </div>
       </div>
 
-      <h1 class="splash-brand-title">Spill<span>Guard</span></h1>
+      <h1 class="splash-brand-title">Spill<span>Sense</span></h1>
       <p class="splash-brand-tagline">AI Ocean SAR & AIS Maritime Forensics</p>
 
       <div class="splash-loader-box">
@@ -104,7 +104,7 @@
             <path d="M50 13L79 24V48C79 67 67 81 50 88C33 81 21 67 21 48V24L50 13Z" fill="#00D4FF" opacity="0.9"/>
             <path d="M28 58C34 52 40 52 46 58C52 64 58 64 72 53M28 67C34 61 40 61 46 67C52 73 58 73 72 62" stroke="#050B14" stroke-width="4" stroke-linecap="round" fill="none"/>
           </svg>
-          <span class="brand-name">Spill<span>Guard</span></span>
+          <span class="brand-name">Spill<span>Sense</span></span>
         </div>
 
         <div class="nav-status-badge">
@@ -115,7 +115,7 @@
         <div class="nav-links">
           <a href="#how-it-works" class="nav-link">How it Works</a>
           <a href="#matrix" class="nav-link">Forensic Advantage</a>
-          <a href="#coverage" class="nav-link">Global Coverage</a>
+          <button type="button" class="nav-link feedback-trigger" id="nav-feedback-btn">Feedback</button>
         </div>
 
         <div class="nav-actions">
@@ -140,7 +140,7 @@
         </h1>
 
         <p class="hero-subheadline">
-          SpillGuard autonomously intercepts orbital Synthetic Aperture Radar (SAR) backscatter, isolates petroleum slicks through heavy clouds and darkness, and cross-correlates hydrodynamic drift models against global AIS ship tracking to hold marine polluters accountable.
+          SpillSense autonomously intercepts orbital Synthetic Aperture Radar (SAR) backscatter, isolates petroleum slicks through heavy clouds and darkness, and cross-correlates hydrodynamic drift models against global AIS ship tracking to hold marine polluters accountable.
         </p>
 
         <div class="hero-ctas">
@@ -183,7 +183,7 @@
       <section id="how-it-works" class="landing-section">
         <div class="section-header">
           <div class="section-tag">AUTOMATED FORENSIC PIPELINE</div>
-          <h2 class="section-title">How SpillGuard Operates</h2>
+          <h2 class="section-title">How SpillSense Operates</h2>
           <p class="section-desc">From orbital microwave backscatter to legal prosecution in four automated phases.</p>
         </div>
 
@@ -406,9 +406,9 @@
           </button>
 
           <!-- 6. Settings -->
-          <button class="sidebar-btn" id="side-btn-settings" title="Sensor Calibration & Settings">
+          <!-- <button class="sidebar-btn" id="side-btn-settings" title="Sensor Calibration & Settings">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          </button>
+          </button> -->
         </nav>
 
         <div class="sidebar-bottom-actions">
@@ -445,12 +445,6 @@
               2026-09-16 15:08:22 UTC
             </div>
 
-            <!-- Global Search -->
-            <div class="topbar-search-box">
-              <svg class="topbar-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="global-search-input" class="topbar-search-input mono" placeholder="Search IMO, vessel, slick ID...">
-            </div>
-
             <!-- Quick Spill Alert bell + unread count -->
             <div class="alert-bell-wrap">
               <button class="alert-bell-btn" id="alert-bell-btn" title="Quick Spill Alerts" aria-label="Quick Spill Alerts" aria-haspopup="dialog" aria-expanded="false">
@@ -458,6 +452,11 @@
                 <span class="alert-bell-count" id="alert-bell-count" hidden>0</span>
               </button>
             </div>
+
+            <button class="emergency-alert-btn" id="emergency-alerts-btn" type="button" aria-haspopup="dialog">
+              <span class="emergency-alert-pulse"></span>
+              <span>EMERGENCY ALERTS</span>
+            </button>
 
             <button class="btn-secondary" id="btn-topbar-logout" style="padding: 6px 12px; font-size: 11px;">
               Logout
@@ -493,6 +492,29 @@
             <div class="alert-disclaimer" id="alert-disclaimer">Investigation support only — requires authorised field verification.</div>
           </div>
         </aside>
+
+        <div class="emergency-modal" id="emergency-modal" aria-hidden="true">
+          <div class="emergency-dialog" role="dialog" aria-modal="true" aria-labelledby="emergency-title">
+            <div class="emergency-dialog-header">
+              <div><span class="emergency-mode-label">OPERATOR REVIEW · DEMO TRANSMISSION</span><h2 id="emergency-title">Emergency Alerts</h2></div>
+              <button class="alert-panel-close" id="emergency-close" type="button" aria-label="Close emergency alerts">&times;</button>
+            </div>
+            <div class="emergency-dialog-body">
+              <div class="emergency-section-title">Active alerts</div>
+              <div id="emergency-active-list" class="emergency-active-list"></div>
+              <div class="emergency-section-title">Alert History</div>
+              <div id="emergency-history-list" class="emergency-history-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="emergency-confirm-modal" id="emergency-confirm-modal" aria-hidden="true">
+          <div class="emergency-dialog emergency-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-emergency-title">
+            <div class="emergency-dialog-header"><div><span class="emergency-mode-label">CONFIRM BEFORE TRANSMISSION</span><h2 id="confirm-emergency-title">Send Alert to Authorities</h2></div><button class="alert-panel-close" id="emergency-confirm-close" type="button" aria-label="Close confirmation">&times;</button></div>
+            <div id="emergency-confirm-body" class="emergency-dialog-body"></div>
+            <div class="emergency-confirm-footer"><span id="emergency-confirm-status" class="emergency-confirm-status"></span><button class="btn-secondary" id="emergency-confirm-cancel" type="button">Cancel</button><button class="btn-primary" id="emergency-send-sms" type="button">SEND VIA SMS</button><button class="btn-primary emergency-official-btn" id="emergency-send-official" type="button">SEND OFFICIAL ALERT</button></div>
+          </div>
+        </div>
 
         <!-- Toast stack (fixed overlay, bottom-right) -->
         <div class="alert-toast-stack" id="alert-toast-stack" aria-live="polite" aria-atomic="false"></div>
@@ -751,15 +773,6 @@
                 </div>
               </div>
 
-              <div class="investigation-actions-right">
-                <button class="btn-export-dossier" id="btn-open-dossier-modal">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                  <span>Generate Legal Dossier (PDF)</span>
-                </button>
-                <button class="btn-primary" id="btn-issue-interpol-alert" style="padding: 8px 16px; font-size: 12px;">
-                  <span>Issue INTERPOL Notice</span>
-                </button>
-              </div>
             </div>
 
             <!-- 3-Column Forensic Layout -->
@@ -828,18 +841,6 @@
                   </div>
                 </div>
 
-                <div class="forensic-card">
-                  <div class="forensic-card-header">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                    <span>Chain of Custody Verification</span>
-                  </div>
-                  <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
-                    Cryptographic SHA-256 telemetry fingerprint generated at sensor ingest. Admissible under UNCLOS & MARPOL.
-                  </div>
-                  <div class="mono" style="font-size: 10px; color: var(--cyan-primary); word-break: break-all; background: rgba(0, 212, 255, 0.05); padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--cyan-border);">
-                    SHA-256: e4b983c27189fa3198de7e5a01bc6f4439c09d57a2c4187f1b70298e10fa31ce
-                  </div>
-                </div>
               </div>
 
               <!-- Column 2: Interactive Evidence Map (Drift Simulation & Overlaid AIS) -->
@@ -1198,6 +1199,70 @@
 
 
   <!-- =====================================================================
+       MODAL: USER FEEDBACK
+       ===================================================================== -->
+  <div class="modal-backdrop" id="feedback-modal">
+    <div class="modal-feedback-box">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" stroke-width="2"><path d="M4 4h16v10H7l-3 3V4z"/><path d="M8 8h8M8 12h6"/></svg>
+          <span style="font-family: var(--font-heading); font-size: 16px; font-weight: 700;">Feedback</span>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-feedback aria-label="Close feedback form">&times;</button>
+      </div>
+
+      <form id="feedback-form" novalidate>
+        <div class="feedback-form-grid">
+          <div class="feedback-field">
+            <label for="feedback-name">Name <span class="optional-label">(optional)</span></label>
+            <input id="feedback-name" name="name" type="text" maxlength="100" placeholder="Your name">
+          </div>
+
+          <div class="feedback-field">
+            <label for="feedback-email">Email <span class="optional-label">(optional)</span></label>
+            <input id="feedback-email" name="email" type="email" maxlength="150" placeholder="you@example.com">
+          </div>
+
+          <div class="feedback-field">
+            <label for="feedback-type">Feedback Type</label>
+            <select id="feedback-type" name="feedback_type">
+              <option value="Bug Report">Bug Report</option>
+              <option value="Feature Request">Feature Request</option>
+              <option value="User Experience">User Experience</option>
+              <option value="General Feedback" selected>General Feedback</option>
+            </select>
+          </div>
+
+          <div class="feedback-field">
+            <label>Rating</label>
+            <div class="feedback-stars" aria-label="Select rating">
+              <button type="button" class="feedback-star-btn active" data-value="1" aria-label="1 star">★</button>
+              <button type="button" class="feedback-star-btn active" data-value="2" aria-label="2 stars">★</button>
+              <button type="button" class="feedback-star-btn active" data-value="3" aria-label="3 stars">★</button>
+              <button type="button" class="feedback-star-btn" data-value="4" aria-label="4 stars">★</button>
+              <button type="button" class="feedback-star-btn" data-value="5" aria-label="5 stars">★</button>
+            </div>
+            <input type="hidden" id="feedback-rating" name="rating" value="3">
+          </div>
+
+          <div class="feedback-field full-width">
+            <label for="feedback-message">Feedback Message <span class="required-label">*</span></label>
+            <textarea id="feedback-message" name="message" rows="5" placeholder="Tell us what you think, what you need, or what isn’t working..." required></textarea>
+          </div>
+        </div>
+
+        <div class="feedback-form-actions">
+          <div id="feedback-status" class="feedback-status" role="alert" aria-live="polite"></div>
+          <div class="feedback-button-row">
+            <button type="button" class="btn-secondary" data-close-feedback>Cancel</button>
+            <button type="submit" class="btn-primary">Submit Feedback</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
        MODAL: COURT-ADMISSIBLE DOSSIER PREVIEW & EXPORT
        ===================================================================== -->
   <div class="modal-backdrop" id="dossier-modal">
@@ -1264,7 +1329,7 @@
 
    <!-- Data & Application Logic -->
   <script src="js/data.js"></script>
-  <script src="js/alerts.js"></script>
+  <script src="js/alerts.js?v=emergency-alerts-20260919-3"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
