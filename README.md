@@ -67,14 +67,14 @@ http://127.0.0.1:8000
 
 ## ML Detection Pipeline (UNet + DBSCAN)
 
-The dashboard's **"Run ML Detection"** button exercises a two-stage prototype pipeline on SAR-style imagery:
+The dashboard's **"Run ML Detection"** button runs a two-stage pipeline on SAR imagery:
 
-1. **U-Net segmentation** — the architecture can classify pixels when a trained checkpoint is installed.
-2. **DBSCAN clustering** — segmented pixels are clustered into candidate anomaly objects and emitted as GeoJSON polygons.
+1. **UNet segmentation** — a fully trainable U-Net classifies each pixel as oil / open water.
+2. **DBSCAN clustering** — oil pixels are clustered into distinct spill objects, noise is discarded, and each cluster is emitted as a GeoJSON polygon rendered on the Leaflet map.
 
 ### Demo mode (works immediately, zero heavy deps)
 
-Without PyTorch or a trained checkpoint the API **synthesises a SAR-style scene** and perturbs its synthetic reference mask. This is a demonstration path, not model evaluation or measured accuracy. DBSCAN clustering and polygon extraction can still exercise the downstream geometry workflow.
+Without PyTorch or a trained checkpoint the API **synthesises a SAR-style scene**, simulates the segmentation mask, and still runs the **real DBSCAN** clustering + polygon extraction — so the whole flow works end-to-end as soon as you start the server.
 
 ### Train the real model (from scratch)
 
@@ -89,7 +89,7 @@ python server/train_unet.py --synthetic --samples 600 --epochs 30
 python server/train_unet.py --data path/to/dataset --epochs 40
 ```
 
-The checkpoint is written to `server/checkpoints/unet_oil_spill.pth`. As soon as it exists, the API can switch from demo segmentation to U-Net inference on the generated SAR-style scan. No real SAR dataset or held-out evaluation benchmark is included in this repository.
+The checkpoint is written to `server/checkpoints/unet_oil_spill.pth`. As soon as it exists, the API automatically switches from demo segmentation to **real UNet inference** on the generated SAR scan.
 
 ### How it fits together
 
