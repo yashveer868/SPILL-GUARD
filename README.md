@@ -22,6 +22,25 @@ Set the PostgreSQL connection string before starting the API. PowerShell example
 $env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/spillguard"
 ```
 
+## Real emergency delivery
+
+The emergency buttons use demo mode by default. For production delivery, set
+`EMERGENCY_ALERT_MODE=production` and configure Twilio for SMS plus an HTTPS
+authority gateway. Keep these values in Vercel Environment Variables; never
+commit them.
+
+```powershell
+$env:EMERGENCY_ALERT_MODE = "production"
+$env:TWILIO_ACCOUNT_SID = "AC..."
+$env:TWILIO_AUTH_TOKEN = "..."
+$env:TWILIO_FROM_NUMBER = "+15551234567"
+$env:EMERGENCY_SMS_TO = "+15557654321"
+$env:EMERGENCY_OFFICIAL_WEBHOOK_URL = "https://authority.example.gov/spill-alerts"
+```
+
+`SEND VIA SMS` sends through Twilio. `SEND OFFICIAL ALERT` posts the complete
+alert payload to `EMERGENCY_OFFICIAL_WEBHOOK_URL`.
+
 Create the `spillguard` database first. The API creates its tables and seeds the initial dashboard data on startup.
 
 ## Run the backend

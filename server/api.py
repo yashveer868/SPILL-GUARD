@@ -3,6 +3,8 @@
 import math
 import json
 import os
+import base64
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from datetime import datetime, timezone
 from pathlib import Path
@@ -133,7 +135,10 @@ def dead_reckon_position(lat: float, lon: float, heading_deg: float, speed_knots
 
 @app.on_event("startup")
 def startup() -> None:
-    init_db()
+    try:
+        init_db()
+    except Exception as exc:
+        print(f"Database unavailable; continuing with API-only features: {exc}")
 
 
 @app.get("/api/health")
@@ -153,22 +158,44 @@ def transmit_emergency_alert(payload: Dict[str, Any]) -> dict:
     if mode != "production":
         raise HTTPException(status_code=500, detail="Emergency alert mode is invalid.")
 
-    endpoint_name = "EMERGENCY_SMS_WEBHOOK_URL" if method == "SMS" else "EMERGENCY_OFFICIAL_WEBHOOK_URL"
-    endpoint = os.getenv(endpoint_name, "")
-    if not endpoint.startswith("https://"):
-        raise HTTPException(status_code=503, detail=f"{method} delivery is not configured. Set {endpoint_name} to an HTTPS gateway.")
-
-    request = Request(
-        endpoint,
-        data=json.dumps({"method": method, "payload": payload}).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
+        if method == "SMS" and all(os.getenv(name) for name in (
+            "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "EMERGENCY_SMS_TO"
+        )):
+            account_sid = os.environ["TWILIO_ACCOUNT_SID"]
+            auth = base64.b64encode(f"{account_sid}:{os.environ['TWILIO_AUTH_TOKEN']}".encode()).decode()
+            message = (
+                f"SpillGuard {payload.get('severity', 'ALERT')} oil spill at {payload.get('location', 'unknown')}. "
+                f"Area {payload.get('area', 'unknown')}; confidence {payload.get('confidence', 'unknown')}. "
+                f"Alert {payload.get('alertId', 'unknown')}. Verify in field."
+            )
+            request = Request(
+                f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
+                data=urlencode({
+                    "To": os.environ["EMERGENCY_SMS_TO"],
+                    "From": os.environ["TWILIO_FROM_NUMBER"],
+                    "Body": message,
+                }).encode(),
+                headers={"Authorization": f"Basic {auth}", "Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+        else:
+            endpoint_name = "EMERGENCY_SMS_WEBHOOK_URL" if method == "SMS" else "EMERGENCY_OFFICIAL_WEBHOOK_URL"
+            endpoint = os.getenv(endpoint_name, "")
+            if not endpoint.startswith("https://"):
+                raise HTTPException(status_code=503, detail=f"{method} delivery is not configured. Set Twilio variables or {endpoint_name}.")
+            request = Request(
+                endpoint,
+                data=json.dumps({"method": method, "payload": payload}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
         with urlopen(request, timeout=15) as response:
             if response.status < 200 or response.status >= 300:
                 raise RuntimeError(f"Gateway returned {response.status}")
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
         raise HTTPException(status_code=502, detail="Configured emergency gateway failed.") from exc
     return {"status": "SENT", "mode": "production", "method": method}
 
