@@ -35,8 +35,9 @@ server/spillguard.db
 *.swo
 *~
 
-# Node/npm
+# Node/npm (if used)
 node_modules/
+package-lock.json
 
 # OS
 .DS_Store

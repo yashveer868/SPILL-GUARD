@@ -407,7 +407,7 @@
   }
 
   // --- Alert lifecycle -----------------------------------------------------
-  function addAlert(result, label, incidentId) {
+  function addAlert(result, label) {
     if (!result || !result.alert) return null;
 
     // De-duplicate: same severity near the same spot should not stack up.
@@ -421,7 +421,6 @@
     const alert = {
       id: uid(),
       label: label || 'Oil spill detected',
-      incidentId: incidentId || null,
       result: result,
       acknowledged: false,
       marker: null
@@ -442,53 +441,11 @@
     return alert;
   }
 
-  async function acknowledge(id) {
+  function acknowledge(id) {
     const alert = alertState.byId.get(id);
     if (!alert || alert.acknowledged) return;
-    if (alert.incidentId) {
-      try {
-        const response = await fetch(`${(window.API_BASE_URL || window.SPILLGUARD_API_BASE || '').replace(/\/$/, '')}/api/incidents/${encodeURIComponent(alert.incidentId)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'INVESTIGATING' })
-        });
-        if (!response.ok) throw new Error(`API returned ${response.status}`);
-      } catch (error) {
-        const list = document.getElementById('alert-list');
-        if (list) list.insertAdjacentHTML('afterbegin', '<div class="alert-empty">Could not update this alert on the API. Try again.</div>');
-        return;
-      }
-    }
     alert.acknowledged = true;
     renderAll();
-  }
-
-  async function loadApiAlerts() {
-    const base = (window.API_BASE_URL || window.SPILLGUARD_API_BASE || '').replace(/\/$/, '');
-    if (!base) return;
-    try {
-      const response = await fetch(`${base}/api/incidents?status=NEW&limit=50`);
-      if (!response.ok) throw new Error(`API returned ${response.status}`);
-      const payload = await response.json();
-      (payload.data || []).forEach((incident) => {
-        const severity = String(incident.severity || 'LOW').toLowerCase();
-        addAlert({
-          alert: true,
-          severity: severity.charAt(0).toUpperCase() + severity.slice(1),
-          detected_at_utc: incident.detectedAt,
-          spill: { lat: incident.latitude, lon: incident.longitude },
-          area_km2: incident.estimatedAreaKm2,
-          oil_confidence: incident.confidenceScore,
-          predicted_impact_hours: null,
-          nearest_sensitive_area: null,
-          distance_to_sensitive_area_km: null,
-          recommended_next_action: 'Review this API incident and verify the observation before response.',
-          disclaimer: DISCLAIMER
-        }, incident.title, incident.id);
-      });
-    } catch (error) {
-      console.warn('Spill Sense API alerts unavailable; keeping current alert state.', error);
-    }
   }
 
   function focusOnMap(id) {
@@ -736,7 +693,6 @@
       alertState.apiBase = (options && options.apiBase) || '';
       wire();
       renderAll();
-      loadApiAlerts();
       return this;
     },
     /** Evaluate a live reading (e.g. from the ML detector) and raise an alert. */
