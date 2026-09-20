@@ -164,9 +164,12 @@
     const hours = reading.predicted_impact_hours == null && nearReceptor && distance
       ? distance / 1.2
       : reading.predicted_impact_hours;
-    const severity = hours != null && hours <= 12 ? 'Critical'
-      : hours != null && hours <= 24 ? 'High'
-        : hours != null && hours <= 48 ? 'Medium' : 'Low';
+    const confidence = Number(reading.oil_confidence ?? 0);
+    const severity = confidence < 75
+      ? 'Low'
+      : hours != null && hours <= 12 ? 'Critical'
+        : hours != null && hours <= 24 ? 'High'
+          : hours != null && hours <= 48 ? 'Medium' : 'Low';
     const actions = {
       Critical: 'Immediate escalation: task an urgent verification pass and alert the regional response centre.',
       High: 'Verify on the next SAR pass and notify the regional response centre. Track drift toward the nearest receptor.',

@@ -876,6 +876,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     return true;
   }
 
+  function setTextIfExists(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value ?? '';
+  }
+
+  function applyIncidentCard(primary, regionKey) {
+    const region = SPILLGUARD_DATA.regions[regionKey];
+    const incidentIdEl = document.getElementById('priority-incident-id');
+    const locationEl = document.getElementById('priority-location-txt');
+    const miniVals = document.querySelectorAll('.priority-mini-val');
+
+    if (!primary) {
+      if (incidentIdEl) incidentIdEl.textContent = 'No incidents';
+      if (locationEl) locationEl.textContent = region ? region.name : 'No active region';
+      if (miniVals) miniVals.forEach((el, idx) => { el.textContent = idx === 0 ? '0 km²' : '—'; });
+      return;
+    }
+
+    if (incidentIdEl) incidentIdEl.textContent = (primary.id ? `#${primary.id}` : 'Incident') + (primary.title ? `: ${primary.title}` : '');
+    if (locationEl) locationEl.textContent = primary.title || (region && region.name) || 'Selected region';
+
+    if (miniVals && miniVals.length >= 4) {
+      miniVals[0].textContent = primary.areaKm2 ? `${primary.areaKm2} km²` : '—';
+      miniVals[1].textContent = primary.volumeBbls ? `${Number(primary.volumeBbls).toLocaleString()} bbls` : '—';
+      miniVals[2].textContent = primary.confidence ? `${primary.confidence}%` : '—';
+      miniVals[3].textContent = primary.primarySuspect ? primary.primarySuspect.name : '—';
+    }
+  }
+
   function updateRegionUI(regionKey) {
     const region = SPILLGUARD_DATA.regions[regionKey];
     if (!region || !validateRegionConfig(regionKey, region)) return;
@@ -894,37 +923,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (state.layers.liveVessels) state.layers.liveVessels.clearLayers();
     const primary = activeSpills[0];
-    // Priority card
-    const idEl = document.getElementById('priority-zone-card');
-    if (primary) {
-      document.getElementById('priority-incident-id').textContent = primary.id || '—';
-      document.getElementById('priority-location-txt').textContent = primary.title || (SPILLGUARD_DATA.regions[regionKey] && SPILLGUARD_DATA.regions[regionKey].name) || '';
-      const miniVals = document.querySelectorAll('.priority-mini-val');
-      if (miniVals && miniVals.length >= 4) {
-        miniVals[0].textContent = primary.areaKm2 ? primary.areaKm2 + ' km²' : '—';
-        miniVals[1].textContent = primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '—';
-        miniVals[2].textContent = primary.confidence ? primary.confidence + '%' : '—';
-        miniVals[3].textContent = primary.primarySuspect ? primary.primarySuspect.name : '—';
-      }
-    } else {
-      document.getElementById('priority-incident-id').textContent = 'No incidents';
-      document.getElementById('priority-location-txt').textContent = SPILLGUARD_DATA.regions[regionKey] ? SPILLGUARD_DATA.regions[regionKey].name : '';
-      document.querySelectorAll('.priority-mini-val').forEach((el, idx) => el.textContent = idx === 0 ? '0 km²' : '—');
-    }
+
+    applyIncidentCard(primary, regionKey);
 
     // Update detail drawer if open or select primary
     if (primary) {
       state.selectedSpill = primary;
       renderSpillAnalysis(primary);
-      // update drawer values silently
-      document.getElementById('drawer-spill-id').textContent = '#' + primary.id;
-      document.getElementById('drawer-spill-title').textContent = primary.title;
-      document.getElementById('drawer-sensor-tag').textContent = primary.sensor || '';
-      document.getElementById('drawer-spec-area').textContent = primary.areaKm2 ? primary.areaKm2 + ' km²' : '';
-      document.getElementById('drawer-spec-volume').textContent = primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '';
-      document.getElementById('drawer-spec-conf').textContent = primary.confidence ? primary.confidence + '%' : '';
-      document.getElementById('drawer-spec-type').textContent = primary.slickType || primary.slick_type || 'Hydrocarbon oil residue';
-      document.getElementById('drawer-suspect-name').textContent = primary.primarySuspect ? `${primary.primarySuspect.name} (${primary.primarySuspect.confidence}% Match)` : '';
+      setTextIfExists('drawer-spill-id', '#' + primary.id);
+      setTextIfExists('drawer-spill-title', primary.title || 'Selected spill');
+      setTextIfExists('drawer-sensor-tag', primary.sensor || '');
+      setTextIfExists('drawer-spec-area', primary.areaKm2 ? primary.areaKm2 + ' km²' : '');
+      setTextIfExists('drawer-spec-volume', primary.volumeBbls ? primary.volumeBbls.toLocaleString() + ' bbls' : '');
+      setTextIfExists('drawer-spec-conf', primary.confidence ? primary.confidence + '%' : '');
+      setTextIfExists('drawer-spec-type', primary.slickType || primary.slick_type || 'Hydrocarbon oil residue');
+      setTextIfExists('drawer-suspect-name', primary.primarySuspect ? `${primary.primarySuspect.name} (${primary.primarySuspect.confidence}% Match)` : '');
+    } else {
+      setTextIfExists('drawer-spill-id', 'No spill');
+      setTextIfExists('drawer-spill-title', 'No active spill');
+      setTextIfExists('drawer-sensor-tag', '');
+      setTextIfExists('drawer-spec-area', '');
+      setTextIfExists('drawer-spec-volume', '');
+      setTextIfExists('drawer-spec-conf', '');
+      setTextIfExists('drawer-spec-type', 'Hydrocarbon oil residue');
+      setTextIfExists('drawer-suspect-name', '');
     }
 
     // Re-render map with region-scoped entities only.
