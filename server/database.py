@@ -11,10 +11,9 @@ import psycopg
 from psycopg.rows import dict_row
 
 def get_connection():
-    database_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/spillguard",
-    )
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL must be configured in .env or the process environment.")
     return psycopg.connect(database_url, row_factory=dict_row)
 
 def init_db():

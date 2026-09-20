@@ -4,14 +4,37 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
   const apiUrl = (path) => `${(window.SPILLGUARD_API_BASE || '').replace(/\/$/, '')}${path}`;
+  const apiStatus = document.getElementById('api-data-status');
+  const setApiStatus = (text, className) => {
+    if (!apiStatus) return;
+    apiStatus.textContent = text;
+    apiStatus.className = `api-data-status ${className || ''}`.trim();
+  };
+  const fetchJson = async (path, options = {}) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(apiUrl(path), { ...options, signal: controller.signal });
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 
-  // The static fixture remains as an offline fallback when the API is unavailable.
+  // Bundled fixtures remain an explicit fallback for offline/demo use only.
   try {
-    const response = await fetch(apiUrl('/api/bootstrap'));
-    if (!response.ok) throw new Error(`API returned ${response.status}`);
-    const serverData = await response.json();
+    const serverData = await fetchJson('/api/bootstrap');
     Object.assign(SPILLGUARD_DATA, serverData);
+    const [summary, incidents] = await Promise.all([
+      fetchJson('/api/dashboard/summary'),
+      fetchJson('/api/incidents?limit=100')
+    ]);
+    SPILLGUARD_DATA.dashboardSummary = summary;
+    SPILLGUARD_DATA.apiIncidents = incidents.data || [];
+    setApiStatus('API DATA', 'is-api');
   } catch (error) {
+    setApiStatus('DEMO FALLBACK DATA', 'is-demo');
     console.warn('Spill Sense API unavailable; using bundled demo data.', error);
   }
 
@@ -21,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const state = {
     currentScreen: 'screen-splash',
     currentRegion: 'malacca',
+    dashboardSummary: SPILLGUARD_DATA.dashboardSummary || null,
     regionRequestId: 0,
     selectedSpill: SPILLGUARD_DATA.spills[0],
     selectedVesselFilter: 'all',
@@ -56,6 +80,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   state.masterVessels = Array.isArray(SPILLGUARD_DATA.vessels) ? [...SPILLGUARD_DATA.vessels] : [];
   state.masterSpills = Array.isArray(SPILLGUARD_DATA.spills) ? [...SPILLGUARD_DATA.spills] : [];
+
+  function renderApiSummary() {
+    const summary = state.dashboardSummary;
+    if (!summary) return;
+    const values = document.querySelectorAll('.analytics-kpi-val');
+    const labels = document.querySelectorAll('.analytics-kpi-lbl');
+    const cards = [
+      [summary.totalIncidents, 'Incidents in API dataset'],
+      [summary.activeIncidents, 'Active incidents'],
+      [summary.criticalIncidents, 'Critical incidents'],
+      [summary.totalVessels, 'Vessels in API dataset']
+    ];
+    cards.forEach(([value, label], index) => {
+      if (values[index]) values[index].textContent = String(value ?? 0);
+      if (labels[index]) labels[index].textContent = label;
+    });
+  }
+  renderApiSummary();
 
   const screens = [
     'screen-splash',

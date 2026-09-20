@@ -1,14 +1,54 @@
 # Spill Sense Backend
 
-This project now includes a lightweight FastAPI backend for vessel matching, suspect ranking, and drift analysis.
+Spill Sense now includes an Express + Prisma MVP backend for incident, vessel, AIS-position, alert-event, and evidence-integrity tracking. The existing Python service remains available for the optional ML/drift prototype endpoints.
 
 ## Prerequisites
 
 - Python 3.10+
 - pip
+- Node.js 20+
 - PostgreSQL 14+
 
 ## Install dependencies
+
+```bash
+npm install
+copy .env.example .env  # Windows
+```
+
+Set `DATABASE_URL` in `.env`; do not commit `.env`.
+
+```powershell
+$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/spillsense"
+npx prisma generate
+npx prisma migrate dev --name init
+npm run seed
+```
+
+Run the Express API:
+
+```bash
+npm run dev
+```
+
+The API listens on `http://localhost:3000`. The static frontend remains available through a static server such as:
+
+```bash
+python -m http.server 5500
+```
+
+Then open `http://localhost:5500`.
+
+Useful Node commands:
+
+- `npm run dev` — local API with Node watch mode
+- `npm start` — production-style API process
+- `npm test` — API contract tests
+- `npm run seed` — reset and insert clearly marked DEMO records
+
+## Legacy Python / ML service
+
+The optional Python service remains available for the current ML and drift prototype:
 
 ```bash
 python -m venv .venv
@@ -43,7 +83,7 @@ alert payload to `EMERGENCY_OFFICIAL_WEBHOOK_URL`.
 
 Create the `spillguard` database first. The API creates its tables and seeds the initial dashboard data on startup.
 
-## Run the backend
+## Run the legacy Python backend
 
 ```bash
 uvicorn server.api:app --reload --host 127.0.0.1 --port 8000
@@ -55,7 +95,18 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-## Available endpoints
+## Express MVP endpoints
+
+- `GET /api/health`
+- `GET /api/incidents`, `GET /api/incidents/:id`
+- `POST /api/incidents`, `PATCH /api/incidents/:id`
+- `GET /api/incidents/:id/timeline`
+- `POST /api/incidents/:id/evidence` — SHA-256 integrity tracking, not legal admissibility
+- `GET /api/vessels`, `GET /api/vessels/:id`, `POST /api/vessels`
+- `POST /api/vessels/:id/positions`
+- `GET /api/dashboard/summary`
+
+## Legacy Python endpoints
 
 - `POST /api/match-vessels`
 - `POST /api/rank-suspects`

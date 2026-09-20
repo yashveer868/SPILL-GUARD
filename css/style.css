@@ -148,6 +148,16 @@ input:focus, select:focus, textarea:focus {
   font-family: var(--font-mono);
 }
 
+.api-data-status {
+  color: var(--text-muted);
+  font: 10px var(--font-mono);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.api-data-status.is-api { color: var(--green-safe); }
+.api-data-status.is-demo { color: var(--amber-warning); }
+.api-data-status.is-error { color: var(--red-alert); }
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
