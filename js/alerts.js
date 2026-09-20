@@ -94,7 +94,10 @@
     byId: new Map()
   };
 
-  const emergencyState = { selected: null, history: JSON.parse(localStorage.getItem('spillguard-emergency-history') || '[]') };
+  const emergencyState = {
+    selected: null,
+    history: JSON.parse(localStorage.getItem('spillsense-emergency-history') || localStorage.getItem('spillguard-emergency-history') || '[]')
+  };
 
   let seq = 0;
 
@@ -575,7 +578,7 @@
       result = { status: 'SIMULATED SENT' };
     }
     const record = { ...payload, time: formatUtc(new Date().toISOString()), recipient: 'Configured Maritime Authority Group', method, status: result.status, incidentStatus: 'Awaiting field verification' };
-    emergencyState.history.unshift(record); emergencyState.history = emergencyState.history.slice(0, 25); localStorage.setItem('spillguard-emergency-history', JSON.stringify(emergencyState.history));
+    emergencyState.history.unshift(record); emergencyState.history = emergencyState.history.slice(0, 25); localStorage.setItem('spillsense-emergency-history', JSON.stringify(emergencyState.history));
     document.getElementById('emergency-confirm-status').textContent = record.status === 'SIMULATED SENT'
       ? `SIMULATED ALERT SENT · DEMO MODE · ${record.time}`
       : `Alert successfully sent to authorities. ${record.time} · ${record.recipient} · ${method} · ${record.status}`;

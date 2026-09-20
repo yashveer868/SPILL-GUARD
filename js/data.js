@@ -1,5 +1,5 @@
 /**
- * SpillGuard Maritime Data & Forensic Telemetry Service
+ * Spill Sense Maritime Data & Forensic Telemetry Service
  * Realistic Synthetic Aperture Radar (SAR) and Class-A AIS Dataset
  */
 

@@ -1,4 +1,4 @@
-// SpillGuard client configuration
+// Spill Sense client configuration
 // Add your Mapbox Access Token here to use Mapbox Dark tiles on the dashboard.
 // Get a token at https://account.mapbox.com/
 window.MAPBOX_TOKEN = '';
