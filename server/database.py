@@ -1,5 +1,5 @@
 """
-SpillGuard Database Layer - PostgreSQL Persistence
+Spill Sense Database Layer - PostgreSQL Persistence
 Handles tables for spills, vessels, investigations, analyst notes, and analytics.
 """
 

@@ -1,5 +1,5 @@
 """
-SpillGuard UNet Training Script
+Spill Sense UNet Training Script
 ===============================
 
 Train the oil-spill segmentation U-Net **from scratch** on labeled SAR
@@ -139,7 +139,7 @@ def dice_loss(pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-6) -> to
 # Training loop
 # ---------------------------------------------------------------------------
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train SpillGuard UNet from scratch")
+    parser = argparse.ArgumentParser(description="Train Spill Sense UNet from scratch")
     parser.add_argument("--data", type=Path, default=None, help="dir containing images/ and masks/")
     parser.add_argument("--synthetic", action="store_true", help="train on generated synthetic scenes")
     parser.add_argument("--samples", type=int, default=500, help="synthetic samples")

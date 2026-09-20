@@ -1,4 +1,4 @@
-# SpillGuard Backend
+# Spill Sense Backend
 
 This project now includes a lightweight FastAPI backend for vessel matching, suspect ranking, and drift analysis.
 

@@ -1,5 +1,5 @@
 /**
- * SpillGuard — Quick Spill Alert (frontend)
+ * Spill Sense — Quick Spill Alert (frontend)
  *
  * Raises an in-app alert when a slick reading breaches any trigger:
  *   - oil confidence  >= 75%
@@ -628,7 +628,7 @@
       const list = document.getElementById('alert-list');
       if (list) {
         list.innerHTML =
-          '<div class="alert-empty">Demo evaluation returned no alerts. Start the SpillGuard backend ' +
+          '<div class="alert-empty">Demo evaluation returned no alerts. Start the Spill Sense backend ' +
           'on <span class="mono">http://127.0.0.1:8000</span> and try again.</div>';
       }
     }

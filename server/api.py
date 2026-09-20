@@ -1,4 +1,4 @@
-"""SpillGuard HTTP API and static-site server."""
+"""Spill Sense HTTP API and static-site server."""
 
 import math
 import json
@@ -78,7 +78,7 @@ except ImportError:  # pragma: no cover - fallback for direct script execution
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
-app = FastAPI(title="SpillGuard API", version="1.0.0")
+app = FastAPI(title="Spill Sense API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -165,7 +165,7 @@ def transmit_emergency_alert(payload: Dict[str, Any]) -> dict:
             account_sid = os.environ["TWILIO_ACCOUNT_SID"]
             auth = base64.b64encode(f"{account_sid}:{os.environ['TWILIO_AUTH_TOKEN']}".encode()).decode()
             message = (
-                f"SpillGuard {payload.get('severity', 'ALERT')} oil spill at {payload.get('location', 'unknown')}. "
+                f"Spill Sense {payload.get('severity', 'ALERT')} oil spill at {payload.get('location', 'unknown')}. "
                 f"Area {payload.get('area', 'unknown')}; confidence {payload.get('confidence', 'unknown')}. "
                 f"Alert {payload.get('alertId', 'unknown')}. Verify in field."
             )

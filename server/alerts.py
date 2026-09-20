@@ -1,5 +1,5 @@
 """
-SpillGuard — Quick Spill Alert evaluation engine.
+Spill Sense — Quick Spill Alert evaluation engine.
 
 A slick reading raises an alert when ANY of three triggers fires:
 

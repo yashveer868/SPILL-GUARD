@@ -1,5 +1,5 @@
 /**
- * SpillGuard — Application Logic & Interactive Prototype Controller
+ * Spill Sense — Application Logic & Interactive Prototype Controller
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const serverData = await response.json();
     Object.assign(SPILLGUARD_DATA, serverData);
   } catch (error) {
-    console.warn('SpillGuard API unavailable; using bundled demo data.', error);
+    console.warn('Spill Sense API unavailable; using bundled demo data.', error);
   }
 
   // =========================================================================
@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     { pct: 38, text: "Calibrating VV/VH polarimetric filters..." },
     { pct: 64, text: "Streaming global AIS Class-A/B beacons..." },
     { pct: 88, text: "Initializing hydrodynamic drift model..." },
-    { pct: 100, text: "SpillGuard Defense Network v4.8: ONLINE" }
+    { pct: 100, text: "Spill Sense Defense Network v4.8: ONLINE" }
   ];
 
   let stepIdx = 0;
@@ -730,7 +730,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Refresh every 30 seconds
     state.liveVesselInterval = setInterval(fetchLiveVesselPositions, 30000);
-    console.log('SpillGuard: Live vessel feed started (30s interval)');
+    console.log('Spill Sense: Live vessel feed started (30s interval)');
   }
 
   // Layer Toggle Controls

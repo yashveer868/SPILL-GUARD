@@ -1,5 +1,5 @@
 """
-SpillGuard ML Detection Pipeline
+Spill Sense ML Detection Pipeline
 ================================
 
 Two-stage computer-vision pipeline for oil spill detection in satellite SAR
@@ -208,7 +208,7 @@ def run_unet_inference(
         model.load_state_dict(state)
         model.eval()
     except Exception as exc:  # pragma: no cover - defensive
-        print(f"SpillGuard: could not load UNet checkpoint ({exc}); using demo mode.")
+        print(f"Spill Sense: could not load UNet checkpoint ({exc}); using demo mode.")
         return None
 
     patch = np.asarray(patch, dtype=np.float32)
@@ -242,7 +242,7 @@ def synthesize_sar_patch(size: int = 256, seed: Optional[int] = None) -> Tuple[A
     """
     if not HAS_NUMPY:  # pragma: no cover - numpy ships with requirements.txt
         raise RuntimeError(
-            "numpy is required for the SpillGuard ML pipeline. "
+            "numpy is required for the Spill Sense ML pipeline. "
             "Install it with: pip install numpy"
         )
 
@@ -452,7 +452,7 @@ def run_detection(
     }
     """
     if not HAS_NUMPY:  # pragma: no cover
-        raise RuntimeError("numpy is required for the SpillGuard ML pipeline.")
+        raise RuntimeError("numpy is required for the Spill Sense ML pipeline.")
 
     patch, mask_gt = synthesize_sar_patch(size=patch_size)
 

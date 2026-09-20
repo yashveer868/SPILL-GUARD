@@ -1,5 +1,5 @@
 """
-Pydantic Data Models for SpillGuard FastAPI Server
+Pydantic Data Models for Spill Sense FastAPI Server
 """
 
 from typing import Any, Dict, List, Optional, Literal
