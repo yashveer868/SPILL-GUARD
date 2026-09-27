@@ -360,7 +360,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.layers.waypoints = L.layerGroup().addTo(state.map);
     state.layers.poiFeatures = L.layerGroup().addTo(state.map);
     state.layers.liveVessels = L.layerGroup().addTo(state.map);
-    state.layers.ml = L.layerGroup().addTo(state.map);
 
     // Quick Spill Alert markers live on their own layer so the existing toggles
     // are untouched.
@@ -395,7 +394,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.layers.slicks.clearLayers();
     state.layers.ais.clearLayers();
     state.layers.drift.clearLayers();
-    state.layers.ml.clearLayers();
 
     spillsToUse.forEach(spill => {
       const polygon = L.polygon(spill.slickPolygon || [], {
@@ -786,16 +784,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // ML Detections toggle
-  document.getElementById('layer-toggle-ml')?.addEventListener('click', function() {
-    this.classList.toggle('active');
-    if (this.classList.contains('active')) {
-      state.layers.ml.addTo(state.map);
-    } else {
-      state.map.removeLayer(state.layers.ml);
-    }
-  });
-
   // Quick Spill Alert — wire the bell, panel, toasts and map markers.
   if (window.SpillGuardAlerts) {
     window.SpillGuardAlerts.init({ apiBase: window.SPILLGUARD_API_BASE || '' });
@@ -810,6 +798,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     state.currentRegion = val;
+    syncRegionHeader(val);
     const requestId = ++state.regionRequestId;
     state.analysisData.drift = null;
     state.analysisData.originZone = null;
@@ -881,6 +870,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (el) el.textContent = value ?? '';
   }
 
+  function syncRegionHeader(regionKey) {
+    const region = SPILLGUARD_DATA.regions[regionKey];
+    const locationEl = document.getElementById('priority-location-txt');
+    if (region && locationEl) {
+      locationEl.textContent = region.name;
+    }
+  }
+
   function applyIncidentCard(primary, regionKey) {
     const region = SPILLGUARD_DATA.regions[regionKey];
     const incidentIdEl = document.getElementById('priority-incident-id');
@@ -895,7 +892,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (incidentIdEl) incidentIdEl.textContent = (primary.id ? `#${primary.id}` : 'Incident') + (primary.title ? `: ${primary.title}` : '');
-    if (locationEl) locationEl.textContent = primary.title || (region && region.name) || 'Selected region';
+    if (locationEl) {
+      locationEl.textContent = region && region.name ? region.name : (primary.locationDesc || primary.title || 'Selected region');
+    }
 
     if (miniVals && miniVals.length >= 4) {
       miniVals[0].textContent = primary.areaKm2 ? `${primary.areaKm2} km²` : '—';
@@ -921,6 +920,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.masterSpills = [...SPILLGUARD_DATA.spills];
     }
 
+    syncRegionHeader(regionKey);
+
     if (state.layers.liveVessels) state.layers.liveVessels.clearLayers();
     const primary = activeSpills[0];
 
@@ -929,6 +930,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Update detail drawer if open or select primary
     if (primary) {
       state.selectedSpill = primary;
+      const inspectButton = document.getElementById('btn-inspect-priority');
+      if (inspectButton) {
+        inspectButton.dataset.spillId = primary.id || '';
+        inspectButton.dataset.region = regionKey;
+      }
       renderSpillAnalysis(primary);
       setTextIfExists('drawer-spill-id', '#' + primary.id);
       setTextIfExists('drawer-spill-title', primary.title || 'Selected spill');
@@ -1149,9 +1155,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   btnInspectPriority?.addEventListener('click', () => {
-    openSpillDrawer(SPILLGUARD_DATA.spills[0]);
+    const activeRegionKey = btnInspectPriority.dataset.region || state.currentRegion || 'malacca';
+    const regionalSpills = SPILLGUARD_DATA.regionSpills?.[activeRegionKey] || SPILLGUARD_DATA.spills || [];
+    const preferredSpillId = btnInspectPriority.dataset.spillId || state.selectedSpill?.id;
+    const activeSpill = regionalSpills.find(spill => spill.id === preferredSpillId)
+      || regionalSpills[0]
+      || state.selectedSpill
+      || SPILLGUARD_DATA.spills[0];
+
+    if (!activeSpill) return;
+
+    state.selectedSpill = activeSpill;
+    openSpillDrawer(activeSpill);
     if (state.map) {
-      state.map.flyTo(SPILLGUARD_DATA.spills[0].coords, 10, { duration: 0.8 });
+      state.map.flyTo(activeSpill.coords, 10, { duration: 0.8 });
     }
   });
 
@@ -2044,176 +2061,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  document.getElementById('btn-run-analysis')?.addEventListener('click', () => runAnalysis(state.selectedSpill));
-  document.getElementById('btn-load-demo-data')?.addEventListener('click', async () => {
-    loadDemoData();
-    // Run demo-only analysis locally (no backend requests)
-    runDemoAnalysis();
+  document.getElementById('btn-case-review')?.addEventListener('click', () => {
+    const regionKey = state.currentRegion || 'malacca';
+    const localSpills = SPILLGUARD_DATA.regionSpills?.[regionKey] || SPILLGUARD_DATA.spills || [];
+    const selected = localSpills[0] || state.selectedSpill || SPILLGUARD_DATA.spills?.[0];
+    if (!selected) return;
+
+    state.selectedSpill = selected;
+    openSpillDrawer(selected);
+    if (state.map) {
+      state.map.flyTo(selected.coords, 10, { duration: 0.8 });
+    }
   });
 
-
-  // =========================================================================
-  // ML DETECTION: UNet segmentation + DBSCAN clustering (via /api/detect/*)
-  // =========================================================================
-  const ML_POLYGON_STYLE = {
-    color: '#FFB020',
-    weight: 2,
-    opacity: 1,
-    fillColor: '#FFB020',
-    fillOpacity: 0.22,
-    dashArray: '4 4'
-  };
-
-  function renderMLDetections(data) {
-    // Clear previous ML results
-    state.layers.ml.clearLayers();
-    const badge = document.getElementById('ml-engine-badge');
-    const statusEl = document.getElementById('ml-status');
-    const previewImg = document.getElementById('ml-preview-img');
-    const clustersSlot = document.getElementById('ml-clusters-slot');
-    const legendEl = document.getElementById('ml-legend');
-
-    if (!data || !data.polygons || !data.polygons.features || !data.polygons.features.length) {
-      if (badge) badge.textContent = 'NO DETECTIONS';
-      if (statusEl) statusEl.textContent = 'UNet + DBSCAN found no oil-slick clusters above the minimum area.';
-      if (legendEl) legendEl.innerHTML = '';
-      return;
+  document.getElementById('btn-reset-view')?.addEventListener('click', () => {
+    const region = SPILLGUARD_DATA.regions[state.currentRegion];
+    if (!region || !state.map) return;
+    updateRegionUI(state.currentRegion);
+    if (region.bounds) {
+      state.map.fitBounds(region.bounds, { padding: [24, 24], maxZoom: region.zoom });
+    } else {
+      state.map.flyTo(region.center, region.zoom, { duration: 1.0 });
     }
-
-    // Engine / mode badge
-    const mode = data.mode === 'real' ? 'UNET (trained weights)' : 'UNET (demo mask)';
-    const dbscan = (data.dbscan_engine || '').includes('scikit-learn') ? 'DBSCAN (sk-learn)' : 'DBSCAN (fallback)';
-    if (badge) badge.textContent = `${mode} · ${dbscan}`;
-
-    // Render polygons on the Leaflet map
-    data.polygons.features.forEach((feat) => {
-      const ring = feat.geometry.coordinates[0];
-      const latlngs = ring.map(([lon, lat]) => [lat, lon]);
-      const props = feat.properties || {};
-
-      const poly = L.polygon(latlngs, ML_POLYGON_STYLE).addTo(state.layers.ml);
-      poly.bindPopup(`
-        <div style="color:#0b1220; font-size:12px; line-height:1.5; min-width:150px;">
-          <strong style="color:#B45309;">ML Spill Cluster #${props.cluster_id}</strong><br>
-          Area: <span style="font-family:monospace;">${props.area_km2} km²</span><br>
-          Confidence: <span style="font-family:monospace;">${props.confidence_pct}%</span><br>
-          Pixels: <span style="font-family:monospace;">${props.oil_pixels}</span>
-        </div>
-      `);
-    });
-
-    // Status summary
-    const biggest = data.polygons.features[0];
-    if (statusEl) {
-      statusEl.innerHTML =
-        `<strong>${data.polygons.features.length}</strong> slick cluster(s) detected ` +
-        `(total oil pixels: ${data.segmentation.oil_pixels}; ` +
-        `largest ${biggest.properties.area_km2} km² @ ${biggest.properties.centroid.map(v => v.toFixed(3)).join(', ')}).`;
-    }
-
-    // Thumbnail preview (left: raw SAR, right: segmented mask)
-    if (previewImg && data.preview_png_b64) {
-      previewImg.src = data.preview_png_b64;
-      previewImg.style.display = 'block';
-    }
-
-    // Cluster table
-    if (clustersSlot) {
-      clustersSlot.innerHTML = (data.clusters || []).slice(0, 6).map(c => `
-        <div class="ml-cluster-row">
-          <span class="mono">#${c.cluster_id}</span>
-          <span class="mono">${c.area_km2} km²</span>
-          <span class="mono" style="color: var(--amber-warning);">${c.confidence_pct}%</span>
-        </div>
-      `).join('');
-    }
-
-    if (legendEl) {
-      legendEl.innerHTML = `
-        <span style="display:inline-flex;align-items:center;gap:6px;">
-          <span style="width:12px;height:12px;background:var(--amber-warning);opacity:.85;border-radius:2px;display:inline-block;"></span>
-          UNet+DBSCAN spill polygons
-        </span>
-        <span class="ml-legend-note">Investigation support, not final proof.</span>`;
-    }
-
-    // Make sure the ML layer toggle is enabled
-    const toggle = document.getElementById('layer-toggle-ml');
-    if (toggle) {
-      toggle.classList.add('active');
-      if (state.map && !state.map.hasLayer(state.layers.ml)) {
-        state.layers.ml.addTo(state.map);
-      }
-    }
-
-    // Fly to the biggest detection
-    const firstRing = data.polygons.features[0].geometry.coordinates[0];
-    if (state.map && firstRing && firstRing.length) {
-      const bounds = L.latLngBounds(firstRing.map(([lon, lat]) => [lat, lon]));
-      state.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 11 });
-    }
-  }
-
-  async function runMLDetection() {
-    const btn = document.getElementById('btn-run-ml-detection');
-    const statusEl = document.getElementById('ml-status');
-    const badge = document.getElementById('ml-engine-badge');
-    const spill = SPILLGUARD_DATA.spills[0];
-
-    const lat = spill && Array.isArray(spill.coords) ? spill.coords[0] : 2.3812;
-    const lon = spill && Array.isArray(spill.coords) ? spill.coords[1] : 101.9124;
-
-    if (btn) btn.disabled = true;
-    if (statusEl) statusEl.textContent = 'Running UNet segmentation + DBSCAN clustering...';
-    if (badge) badge.textContent = '…';
-
-    const start = performance.now();
-    try {
-      const resp = await fetch(apiUrl(`/api/detect/demo?lat=${lat}&lon=${lon}&resolution_m=10&patch_size=256`), {
-        cache: 'no-store'
-      });
-      if (!resp.ok) throw new Error(`API returned ${resp.status}`);
-      const data = await resp.json();
-      const elapsed = ((performance.now() - start) / 1000).toFixed(1);
-      renderMLDetections(data);
-      if (statusEl) statusEl.textContent = `Pipeline complete in ${elapsed}s.`;
-    } catch (err) {
-      console.error('ML detection failed:', err);
-      if (statusEl) {
-        statusEl.innerHTML = `Detection failed: <span class="mono">${String(err.message || err)}</span>. ` +
-          `Start the backend (uvicorn server.api:app) to enable the UNet + DBSCAN pipeline.`;
-      }
-      if (badge) badge.textContent = 'OFFLINE';
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  document.getElementById('btn-run-ml-detection')?.addEventListener('click', runMLDetection);
-
-  // Warm-up model status badge when the dashboard first appears
-  async function loadMLModelStatus() {
-    try {
-      const resp = await fetch(apiUrl('/api/detect/model'), { cache: 'no-store' });
-      if (!resp.ok) return;
-      const info = await resp.json();
-      const badge = document.getElementById('ml-engine-badge');
-      if (badge && info) {
-        badge.textContent = info.mode === 'real'
-          ? 'UNET READY · DBSCAN'
-          : (info.torch_available ? 'UNET (demo mask)' : 'UNET (demo mask)');
-        const statusEl = document.getElementById('ml-status');
-        if (statusEl && statusEl.textContent.indexOf('Idle') === 0) {
-          statusEl.textContent = info.checkpoint_exists
-            ? 'Trained UNet checkpoint loaded — segmentations use real inference.'
-            : 'No UNet checkpoint yet — demo masks simulate segmentation. Train with server/train_unet.py.';
-        }
-      }
-    } catch (e) {
-      /* backend not running; leave the idle state */
-    }
-  }
-  loadMLModelStatus();
+  });
 
   renderAnalysisPanel();
 

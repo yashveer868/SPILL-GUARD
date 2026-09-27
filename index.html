@@ -509,8 +509,8 @@
                   <span class="mono" style="font-size: 11px; color: var(--red-alert);">CRITICAL</span>
                 </div>
 
-                <div class="priority-incident-id">#SG-8842: Malacca TSS</div>
-                <div class="priority-location-txt">Offshore Melaka • Traffic Separation Scheme</div>
+                <div id="priority-incident-id" class="priority-incident-id">#SG-8842: Malacca TSS</div>
+                <div id="priority-location-txt" class="priority-location-txt">Offshore Melaka • Traffic Separation Scheme</div>
 
                 <div class="priority-metrics-row">
                   <div>
@@ -531,76 +531,16 @@
                   </div>
                 </div>
 
-                <button class="btn-inspect-priority" id="btn-inspect-priority">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  <span>Inspect Incident & Attribution</span>
-                </button>
-
                 <!-- New Analysis Controls Section -->
                 <div class="analysis-actions">
-                  <button class="btn-primary btn-run-analysis" id="btn-run-analysis">
-                    <span>Run Analysis</span>
+                  <button class="btn-primary btn-case-review" id="btn-case-review" type="button">
+                    <span>Case Review</span>
                   </button>
-                  <button class="btn-secondary btn-demo-data" id="btn-load-demo-data">
-                    <span>Demo Data</span>
-                  </button>
-                  <button class="btn-ml-detection" id="btn-run-ml-detection" title="Run UNet segmentation + DBSCAN clustering on a SAR scan">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    <span>Run ML Detection</span>
+                  <button class="btn-secondary btn-reset-view" id="btn-reset-view" type="button">
+                    <span>Reset View</span>
                   </button>
                 </div>
                 <div class="analysis-support-note">Investigation support, not final proof</div>
-              </div>
-
-              <!-- New Analysis Output Panel -->
-              <div class="analysis-info-panel" id="analysis-info-panel">
-                <div class="analysis-panel-header">
-                  <div>
-                    <div class="analysis-panel-title">Vessel Risk Ranking</div>
-                    <div class="analysis-panel-subtitle">Investigation support, not final proof</div>
-                  </div>
-                </div>
-                <div class="analysis-panel-body">
-                  <table class="analysis-results-table">
-                    <thead>
-                      <tr>
-                        <th>Vessel</th>
-                        <th>Score</th>
-                        <th>Priority</th>
-                      </tr>
-                    </thead>
-                    <tbody id="analysis-ranking-body">
-                      <tr>
-                        <td colspan="3" class="analysis-empty-state">No analysis run yet</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="analysis-warning-box">
-                  <div class="analysis-warning-title">Dark Vessel Warnings</div>
-                  <ul id="dark-vessel-warning-list">
-                    <li>No suspicious AIS gaps detected yet.</li>
-                  </ul>
-                </div>
-              </div>
-
-              <!-- ML Detection Panel (UNet + DBSCAN results) -->
-              <div class="ml-detection-panel" id="ml-detection-panel">
-                <div class="ml-panel-header-row">
-                  <div class="ml-panel-title">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="2"/></svg>
-                    <span>UNet + DBSCAN Detection</span>
-                  </div>
-                  <div class="ml-engine-badge" id="ml-engine-badge">—</div>
-                </div>
-                <div class="ml-panel-body">
-                  <div class="ml-status-line" id="ml-status">Idle — click "Run ML Detection" to segment a SAR scan</div>
-                  <div class="ml-preview-row">
-                    <img id="ml-preview-img" class="ml-preview-img" alt="UNet segmentation preview" style="display: none;">
-                    <div class="ml-clusters-slot" id="ml-clusters-slot"></div>
-                  </div>
-                  <div class="ml-legend" id="ml-legend"></div>
-                </div>
               </div>
 
               <!-- Floating Map Layer Toggles (Top-Right) -->
