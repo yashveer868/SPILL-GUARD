@@ -38,6 +38,11 @@ import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 # ---------------------------------------------------------------------------
 # Optional dependency detection
 # ---------------------------------------------------------------------------
@@ -45,7 +50,7 @@ try:
     import numpy as np
 
     HAS_NUMPY = True
-except ImportError:  # pragma: no cover - optional dependency
+except (ImportError, Exception):  # pragma: no cover - optional dependency
     np = None
     HAS_NUMPY = False
 
@@ -55,7 +60,7 @@ try:
     import torch.nn.functional as F
 
     HAS_TORCH = True
-except ImportError:  # pragma: no cover - optional dependency
+except (ImportError, Exception):  # pragma: no cover - optional dependency
     torch = None
     nn = None
     F = None
@@ -65,7 +70,7 @@ try:
     from sklearn.cluster import DBSCAN as _SKLEARN_DBSCAN
 
     HAS_SKLEARN = True
-except ImportError:  # pragma: no cover - optional dependency
+except (ImportError, Exception):  # pragma: no cover - optional dependency
     _SKLEARN_DBSCAN = None
     HAS_SKLEARN = False
 
@@ -73,7 +78,7 @@ try:
     from PIL import Image
 
     HAS_PIL = True
-except ImportError:  # pragma: no cover - optional dependency
+except (ImportError, Exception):  # pragma: no cover - optional dependency
     Image = None
     HAS_PIL = False
 
