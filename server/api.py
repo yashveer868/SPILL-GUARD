@@ -1,8 +1,13 @@
 """Spill Sense HTTP API and static-site server."""
 
+import os
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 import math
 import json
-import os
 import base64
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
