@@ -3,7 +3,7 @@
 This project now includes a lightweight FastAPI backend for vessel matching, suspect ranking, and drift analysis.
 
 ## Prerequisites
-k
+
 - Python 3.10+
 - pip
 - PostgreSQL 14+
@@ -29,7 +29,7 @@ Variables. Neon’s managed Vercel integrations provide this pooled URL by
 default; use the pooled URL for serverless functions. The database must be
 reachable from Vercel, and the database role needs permission to create the
 application tables. Keep the connection string out of source control.
-bn
+
 ## Real emergency delivery
 
 The emergency buttons use demo mode by default. For production delivery, set
