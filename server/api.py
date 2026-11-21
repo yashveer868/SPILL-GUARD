@@ -2,6 +2,7 @@
 
 import math
 import json
+import logging
 import os
 import base64
 from urllib.parse import urlencode
@@ -10,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+import psycopg
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from server.cors import configure_cors
@@ -38,6 +41,7 @@ except ImportError:  # pragma: no cover - direct script execution
 try:
     from server.database import (
         add_vessel_note,
+        DatabaseConfigurationError,
         get_vessel_notes,
         init_db,
         query_analytics,
@@ -59,6 +63,7 @@ try:
 except ImportError:  # pragma: no cover - fallback for direct script execution
     from database import (
         add_vessel_note,
+        DatabaseConfigurationError,
         get_vessel_notes,
         init_db,
         query_analytics,
@@ -81,6 +86,27 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 
 app = FastAPI(title="Spill Sense API", version="1.0.0")
 configure_cors(app)
+logger = logging.getLogger(__name__)
+
+
+async def database_error_response(
+    _request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    sqlstate = getattr(exc, "sqlstate", None)
+    logger.error(
+        "Database request failed: error_type=%s sqlstate=%s",
+        type(exc).__name__,
+        sqlstate or "unavailable",
+    )
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database is unavailable."},
+    )
+
+
+app.add_exception_handler(DatabaseConfigurationError, database_error_response)
+app.add_exception_handler(psycopg.Error, database_error_response)
 
 
 def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -132,8 +158,12 @@ def dead_reckon_position(lat: float, lon: float, heading_deg: float, speed_knots
 def startup() -> None:
     try:
         init_db()
-    except Exception as exc:
-        print(f"Database unavailable; continuing with API-only features: {exc}")
+    except (DatabaseConfigurationError, psycopg.Error) as exc:
+        logger.error(
+            "Database initialization failed: error_type=%s sqlstate=%s",
+            type(exc).__name__,
+            getattr(exc, "sqlstate", None) or "unavailable",
+        )
 
 
 @app.get("/api/health")

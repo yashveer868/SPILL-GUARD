@@ -10,11 +10,15 @@ from typing import List, Dict, Any, Optional
 import psycopg
 from psycopg.rows import dict_row
 
+
+class DatabaseConfigurationError(RuntimeError):
+    """Raised when the database connection is not configured."""
+
+
 def get_connection():
-    database_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/spillguard",
-    )
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if not database_url:
+        raise DatabaseConfigurationError("DATABASE_URL is not configured")
     return psycopg.connect(database_url, row_factory=dict_row)
 
 def init_db():

@@ -16,11 +16,17 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Set the PostgreSQL connection string before starting the API. PowerShell example:
+Set `DATABASE_URL` to your PostgreSQL connection string before starting the API.
+The API has no implicit localhost database fallback.
 
 ```powershell
-$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/spillguard"
+$env:DATABASE_URL = "<your PostgreSQL connection string>"
 ```
+
+For Vercel, add `DATABASE_URL` to the project's Production Environment Variables.
+The database must be reachable from Vercel, and its user needs permission to
+create the application tables and seed data during startup. Keep the connection
+string out of source control.
 bn
 ## Real emergency delivery
 
