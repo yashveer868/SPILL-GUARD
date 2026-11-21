@@ -17,16 +17,18 @@ pip install -r requirements.txt
 ```
 
 Set `DATABASE_URL` to your PostgreSQL connection string before starting the API.
-The API has no implicit localhost database fallback.
+`POSTGRES_URL` is also accepted when `DATABASE_URL` is not set. The API has no
+implicit localhost database fallback and does not use unpooled URL variables.
 
 ```powershell
 $env:DATABASE_URL = "<your PostgreSQL connection string>"
 ```
 
-For Vercel, add `DATABASE_URL` to the project's Production Environment Variables.
-The database must be reachable from Vercel, and its user needs permission to
-create the application tables and seed data during startup. Keep the connection
-string out of source control.
+For Vercel, configure `DATABASE_URL` in the project's Production Environment
+Variables. Neon’s managed Vercel integrations provide this pooled URL by
+default; use the pooled URL for serverless functions. The database must be
+reachable from Vercel, and the database role needs permission to create the
+application tables. Keep the connection string out of source control.
 bn
 ## Real emergency delivery
 
@@ -47,7 +49,14 @@ $env:EMERGENCY_OFFICIAL_WEBHOOK_URL = "https://authority.example.gov/spill-alert
 `SEND VIA SMS` sends through Twilio. `SEND OFFICIAL ALERT` posts the complete
 alert payload to `EMERGENCY_OFFICIAL_WEBHOOK_URL`.
 
-Create the `spillguard` database first. The API creates its tables and seeds the initial dashboard data on startup.
+Create the `spillguard` database first. On startup, the API repeatably creates
+missing tables with `CREATE TABLE IF NOT EXISTS`; it does not alter or delete
+existing tables or records. Demo rows are not seeded automatically. Explicit
+demo seeding is available only in a development `APP_ENV`.
+
+There is no versioned migration runner. If an existing database has an older
+table shape, review and apply a non-destructive schema migration before
+deployment; `CREATE TABLE IF NOT EXISTS` does not add missing columns.
 
 ## Run the backend
 

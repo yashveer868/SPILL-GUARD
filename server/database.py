@@ -16,13 +16,34 @@ class DatabaseConfigurationError(RuntimeError):
 
 
 def get_connection():
-    database_url = os.getenv("DATABASE_URL", "").strip()
+    database_url = (
+        os.getenv("DATABASE_URL", "").strip()
+        or os.getenv("POSTGRES_URL", "").strip()
+    )
     if not database_url:
-        raise DatabaseConfigurationError("DATABASE_URL is not configured")
-    return psycopg.connect(database_url, row_factory=dict_row)
+        raise DatabaseConfigurationError(
+            "Set DATABASE_URL or POSTGRES_URL to a PostgreSQL connection string."
+        )
+    return psycopg.connect(
+        database_url,
+        row_factory=dict_row,
+        connect_timeout=10,
+    )
 
-def init_db():
-    conn = get_connection()
+
+def init_db(*, seed_demo_data: bool = False) -> None:
+    if seed_demo_data and os.getenv("APP_ENV", "").strip().lower() not in {
+        "dev",
+        "development",
+        "local",
+    }:
+        raise ValueError("Demo data seeding is restricted to development.")
+
+    with get_connection() as conn:
+        _initialize_schema(conn, seed_demo_data=seed_demo_data)
+
+
+def _initialize_schema(conn: psycopg.Connection, *, seed_demo_data: bool) -> None:
     cursor = conn.cursor()
 
     # 1. Spills Table
@@ -131,15 +152,14 @@ def init_db():
 
     conn.commit()
 
-    # Seed default data if empty
-    cursor.execute("SELECT COUNT(*) AS spill_count FROM spills")
-    if cursor.fetchone()["spill_count"] == 0:
-        seed_initial_data(cursor)
-        conn.commit()
+    if seed_demo_data:
+        cursor.execute("SELECT COUNT(*) AS spill_count FROM spills")
+        if cursor.fetchone()["spill_count"] == 0:
+            _seed_demo_data(cursor)
+            conn.commit()
 
-    conn.close()
 
-def seed_initial_data(cursor):
+def _seed_demo_data(cursor):
     # Seed Spills
     spills = [
         {
@@ -482,14 +502,13 @@ def seed_initial_data(cursor):
 
 # Helper Query Functions
 def query_spills(severity: Optional[str] = None) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    if severity:
-        cursor.execute("SELECT * FROM spills WHERE severity = %s", (severity,))
-    else:
-        cursor.execute("SELECT * FROM spills")
-    rows = cursor.fetchall()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        if severity:
+            cursor.execute("SELECT * FROM spills WHERE severity = %s", (severity,))
+        else:
+            cursor.execute("SELECT * FROM spills")
+        rows = cursor.fetchall()
 
     result = []
     for r in rows:
@@ -515,11 +534,10 @@ def query_spills(severity: Optional[str] = None) -> List[Dict[str, Any]]:
     return result
 
 def query_spill_by_id(spill_id: str) -> Optional[Dict[str, Any]]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM spills WHERE id = %s", (spill_id,))
-    r = cursor.fetchone()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM spills WHERE id = %s", (spill_id,))
+        r = cursor.fetchone()
     if not r:
         return None
     return {
@@ -543,11 +561,10 @@ def query_spill_by_id(spill_id: str) -> Optional[Dict[str, Any]]:
     }
 
 def query_vessels(filter_type: Optional[str] = None, search: Optional[str] = None) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM vessels")
-    rows = cursor.fetchall()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM vessels")
+        rows = cursor.fetchall()
 
     result = []
     for r in rows:
@@ -593,19 +610,18 @@ def query_vessels(filter_type: Optional[str] = None, search: Optional[str] = Non
     return result
 
 def save_feedback(name: Optional[str], email: Optional[str], feedback_type: str, rating: int, message: str) -> Dict[str, Any]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        INSERT INTO feedback (name, email, feedback_type, rating, message)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, name, email, feedback_type, rating, message, created_at
-        """,
-        (name, email, feedback_type, rating, message),
-    )
-    row = cursor.fetchone()
-    conn.commit()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO feedback (name, email, feedback_type, rating, message)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, name, email, feedback_type, rating, message, created_at
+            """,
+            (name, email, feedback_type, rating, message),
+        )
+        row = cursor.fetchone()
+        conn.commit()
     return {
         "id": row["id"],
         "name": row["name"],
@@ -618,32 +634,29 @@ def save_feedback(name: Optional[str], email: Optional[str], feedback_type: str,
 
 
 def add_vessel_note(imo: int, note_text: str, author: str = "Operator"):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO vessel_notes (imo, note_text, author)
-        VALUES (%s, %s, %s)
-        RETURNING id
-    """, (imo, note_text, author))
-    conn.commit()
-    note_id = cursor.fetchone()["id"]
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO vessel_notes (imo, note_text, author)
+            VALUES (%s, %s, %s)
+            RETURNING id
+        """, (imo, note_text, author))
+        conn.commit()
+        note_id = cursor.fetchone()["id"]
     return {"id": note_id, "imo": imo, "note": note_text, "author": author}
 
 def get_vessel_notes(imo: int) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM vessel_notes WHERE imo = %s ORDER BY created_at DESC", (imo,))
-    rows = cursor.fetchall()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM vessel_notes WHERE imo = %s ORDER BY created_at DESC", (imo,))
+        rows = cursor.fetchall()
     return [{"id": r["id"], "imo": r["imo"], "note": r["note_text"], "author": r["author"], "createdAt": r["created_at"]} for r in rows]
 
 def query_investigation(incident_id: str) -> Optional[Dict[str, Any]]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM investigations WHERE incident_id = %s", (incident_id,))
-    r = cursor.fetchone()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM investigations WHERE incident_id = %s", (incident_id,))
+        r = cursor.fetchone()
     if not r:
         return None
     return {
@@ -660,11 +673,10 @@ def query_investigation(incident_id: str) -> Optional[Dict[str, Any]]:
     }
 
 def query_analytics() -> Dict[str, Any]:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM analytics WHERE id = 1")
-    r = cursor.fetchone()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM analytics WHERE id = 1")
+        r = cursor.fetchone()
     if not r:
         return {}
     return {

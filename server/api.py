@@ -90,18 +90,33 @@ logger = logging.getLogger(__name__)
 
 
 async def database_error_response(
-    _request: Request,
+    request: Request,
     exc: Exception,
 ) -> JSONResponse:
     sqlstate = getattr(exc, "sqlstate", None)
+    unavailable = isinstance(
+        exc,
+        (
+            DatabaseConfigurationError,
+            psycopg.OperationalError,
+            psycopg.InterfaceError,
+        ),
+    )
     logger.error(
-        "Database request failed: error_type=%s sqlstate=%s",
+        "Database request failed: path=%s error_type=%s sqlstate=%s",
+        request.url.path,
         type(exc).__name__,
         sqlstate or "unavailable",
     )
     return JSONResponse(
-        status_code=503,
-        content={"detail": "Database is unavailable."},
+        status_code=503 if unavailable else 500,
+        content={
+            "detail": (
+                "Database is unavailable."
+                if unavailable
+                else "Database operation failed."
+            )
+        },
     )
 
 
@@ -687,17 +702,14 @@ def submit_feedback(payload: FeedbackCreate) -> dict:
     name = payload.name.strip() if payload.name else None
     email = payload.email.strip() if payload.email else None
 
-    try:
-        saved = save_feedback(
-            name=name,
-            email=email,
-            feedback_type=feedback_type,
-            rating=int(payload.rating),
-            message=message,
-        )
-        return {"success": True, "message": "Thank you for your feedback!", "data": saved}
-    except Exception:
-        raise HTTPException(status_code=500, detail="Unable to save feedback right now. Please try again later.")
+    saved = save_feedback(
+        name=name,
+        email=email,
+        feedback_type=feedback_type,
+        rating=int(payload.rating),
+        message=message,
+    )
+    return {"success": True, "message": "Thank you for your feedback!", "data": saved}
 
 
 @app.post("/api/alerts/evaluate")
