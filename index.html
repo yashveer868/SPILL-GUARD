@@ -3,8 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SpillSense — AI Satellite SAR Oil Spill Detection & AIS Maritime Forensics</title>
-  <meta name="description" content="AI-powered command-center detecting ocean oil spills from Synthetic Aperture Radar (SAR) satellite imagery and identifying responsible vessels via AIS tracking data.">
+  <title>SpillSense | Intelligent Oil Spill Monitoring and Detection</title>
+  <meta name="description" content="SpillSense is an oil spill monitoring platform designed to identify potential marine pollution events, visualize affected ocean regions and support faster environmental response.">
+  <link rel="canonical" href="https://oik-spill.vercel.app/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://oik-spill.vercel.app/">
+  <meta property="og:title" content="SpillSense | Intelligent Oil Spill Monitoring and Detection">
+  <meta property="og:description" content="SpillSense is an oil spill monitoring platform designed to identify potential marine pollution events, visualize affected ocean regions and support faster environmental response.">
+  <meta property="og:image" content="https://oik-spill.vercel.app/assets/images/sar_satellite_ocean.jpg">
+  <meta property="og:image:width" content="1376">
+  <meta property="og:image:height" content="768">
+  <meta property="og:image:alt" content="Satellite SAR imagery of the ocean used for oil spill monitoring">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SpillSense | Intelligent Oil Spill Monitoring and Detection">
+  <meta name="twitter:description" content="SpillSense is an oil spill monitoring platform designed to identify potential marine pollution events, visualize affected ocean regions and support faster environmental response.">
+  <meta name="twitter:image" content="https://oik-spill.vercel.app/assets/images/sar_satellite_ocean.jpg">
+  <meta name="twitter:image:alt" content="Satellite SAR imagery of the ocean used for oil spill monitoring">
   
   <!-- Google Fonts: Space Grotesk, Inter, JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,6 +33,7 @@
 </head>
 <body>
 
+  <main id="main-content">
   <!-- =====================================================================
        VIEW CONTAINER (Single-Page Application Shell)
        ===================================================================== -->
@@ -80,7 +95,7 @@
          =================================================================== -->
     <section id="screen-landing" class="screen-view">
       <!-- Sticky Frosted Glass Navbar -->
-      <nav class="landing-nav">
+      <nav class="landing-nav" aria-label="Primary navigation">
         <div class="nav-brand">
           <svg class="brand-icon-sm" viewBox="0 0 100 100" fill="none">
             <path d="M50 13L79 24V48C79 67 67 81 50 88C33 81 21 67 21 48V24L50 13Z" fill="#00D4FF" opacity="0.9"/>
@@ -270,10 +285,10 @@
         </div>
 
         <div class="login-card">
-          <h2 class="login-title">Command Portal</h2>
+          <h1 class="login-title">Command Portal</h1>
           <p class="login-subtitle">Authenticate with Coast Guard or Marine Agency credentials.</p>
 
-          <form id="login-form" onsubmit="return false;">
+          <form id="login-form">
             <div class="login-field-group">
               <label class="field-label" for="login-email">Agency ID / Email</label>
               <input type="email" id="login-email" class="field-input mono" value="e.vance@uscg.maritime.gov" required>
@@ -337,40 +352,40 @@
     <div id="app-shell-wrapper" class="app-shell" style="display: none;">
       
       <!-- Left Icon Sidebar -->
-      <aside class="app-sidebar">
+      <aside class="app-sidebar" aria-label="Application sidebar">
         <div>
-          <div class="sidebar-brand-icon" id="sidebar-logo-btn" title="Return to Dashboard">
+          <button type="button" class="sidebar-brand-icon" id="sidebar-logo-btn" aria-label="Return to Dashboard">
             <svg width="34" height="34" viewBox="0 0 100 100" fill="none">
               <path d="M50 13L79 24V48C79 67 67 81 50 88C33 81 21 67 21 48V24L50 13Z" fill="#00D4FF"/>
               <path d="M28 58C34 52 40 52 46 58C52 64 58 64 72 53M28 67C34 61 40 61 46 67C52 73 58 73 72 62" stroke="#050B14" stroke-width="4" stroke-linecap="round" fill="none"/>
             </svg>
-          </div>
+          </button>
         </div>
 
-        <nav class="sidebar-nav-items">
+        <nav class="sidebar-nav-items" aria-label="Application views">
           <!-- 1. Dashboard / Live Map -->
-          <button class="sidebar-btn active" data-app-view="screen-dashboard" id="side-btn-dashboard" title="Live Tactical Map">
+          <button class="sidebar-btn active" data-app-view="screen-dashboard" id="side-btn-dashboard" title="Live Tactical Map" aria-label="Live Tactical Map">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
           </button>
 
           <!-- 2. Investigation -->
-          <button class="sidebar-btn" data-app-view="screen-investigation" id="side-btn-investigation" title="Spill Investigation & Attribution">
+          <button class="sidebar-btn" data-app-view="screen-investigation" id="side-btn-investigation" title="Spill Investigation & Attribution" aria-label="Spill Investigation and Attribution">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           </button>
 
           <!-- 3. Vessel Tracking -->
-          <button class="sidebar-btn" data-app-view="screen-vessels" id="side-btn-vessels" title="AIS Vessel Tracking Registry">
+          <button class="sidebar-btn" data-app-view="screen-vessels" id="side-btn-vessels" title="AIS Vessel Tracking Registry" aria-label="AIS Vessel Tracking Registry">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20a2.4 2.4 0 0 0 2 1 2.4 2.4 0 0 0 2-1 2.4 2.4 0 0 1 2-1 2.4 2.4 0 0 1 2 1 2.4 2.4 0 0 0 2 1 2.4 2.4 0 0 0 2-1 2.4 2.4 0 0 1 2-1 2.4 2.4 0 0 1 2 1 2.4 2.4 0 0 0 2 1 2.4 2.4 0 0 0 2-1"/><path d="M4 18L3 12h18l-1 6"/><path d="M12 12V4l4 2-4 2"/></svg>
           </button>
 
           <!-- 4. Alerts -->
-          <button class="sidebar-btn" id="side-btn-alerts" title="Critical Slicks Alert Queue">
+          <button class="sidebar-btn" id="side-btn-alerts" title="Critical Slicks Alert Queue" aria-label="Critical Slicks Alert Queue, 3 alerts">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             <span class="sidebar-badge">3</span>
           </button>
 
           <!-- 5. Analytics -->
-          <button class="sidebar-btn" data-app-view="screen-analytics" id="side-btn-analytics" title="Spills Analytics & Trends">
+          <button class="sidebar-btn" data-app-view="screen-analytics" id="side-btn-analytics" title="Spills Analytics & Trends" aria-label="Spills Analytics and Trends">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           </button>
 
@@ -394,7 +409,7 @@
         <header class="app-topbar">
           <div class="topbar-left">
             <!-- Region Selector -->
-            <select id="region-selector" class="topbar-region-select">
+            <select id="region-selector" class="topbar-region-select" aria-label="Monitoring region">
               <option value="malacca" selected>Strait of Malacca (TSS Corridor)</option>
               <option value="persian_gulf">Persian Gulf (Strait of Hormuz)</option>
               <option value="north_sea">North Sea (Dogger Bank Sector)</option>
@@ -436,7 +451,7 @@
         <!-- =============================================================
              QUICK SPILL ALERT PANEL (slide-in, does not alter layout)
              ============================================================= -->
-        <aside class="alert-panel" id="alert-panel" role="dialog" aria-label="Quick Spill Alerts" aria-hidden="true">
+        <div class="alert-panel" id="alert-panel" role="dialog" aria-label="Quick Spill Alerts" aria-hidden="true">
           <div class="alert-panel-header">
             <div class="alert-panel-title-group">
               <span class="alert-panel-title">Quick Spill Alerts</span>
@@ -460,7 +475,7 @@
           <div class="alert-panel-footer">
             <div class="alert-disclaimer" id="alert-disclaimer">Investigation support only — requires authorised field verification.</div>
           </div>
-        </aside>
+        </div>
 
         <div class="emergency-modal" id="emergency-modal" aria-hidden="true">
           <div class="emergency-dialog" role="dialog" aria-modal="true" aria-labelledby="emergency-title">
@@ -557,10 +572,10 @@
                     <span class="drawer-id-badge" id="drawer-spill-id">#SG-8842</span>
                     <h3 class="drawer-title" id="drawer-spill-title">Malacca Strait TSS</h3>
                   </div>
-                  <button class="drawer-close-btn" id="btn-close-drawer">&times;</button>
+                  <button class="drawer-close-btn" id="btn-close-drawer" type="button" aria-label="Close spill details">&times;</button>
                 </div>
 
-                <div class="drawer-body">
+                <div class="drawer-body" tabindex="0" aria-label="Spill details">
                   <!-- SAR Thumbnail -->
                   <div class="drawer-sar-thumbnail-box">
                     <img src="assets/images/sar_slick_detail.jpg" alt="SAR Slick Inspection" class="drawer-sar-img" id="drawer-sar-img">
@@ -947,7 +962,7 @@
           <!-- =============================================================
                SCREEN 7: ANALYTICS PAGE
                ============================================================= -->
-          <section id="screen-analytics" class="screen-view">
+          <section id="screen-analytics" class="screen-view" tabindex="0">
             <!-- Analytics KPI Grid -->
             <div class="analytics-kpi-grid">
               <div class="analytics-kpi-card">
@@ -1080,11 +1095,11 @@
        MODAL: USER FEEDBACK
        ===================================================================== -->
   <div class="modal-backdrop" id="feedback-modal">
-    <div class="modal-feedback-box">
+    <div class="modal-feedback-box" role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 10px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" stroke-width="2"><path d="M4 4h16v10H7l-3 3V4z"/><path d="M8 8h8M8 12h6"/></svg>
-          <span style="font-family: var(--font-heading); font-size: 16px; font-weight: 700;">Feedback</span>
+          <span id="feedback-modal-title" style="font-family: var(--font-heading); font-size: 16px; font-weight: 700;">Feedback</span>
         </div>
         <button type="button" class="modal-close-btn" data-close-feedback aria-label="Close feedback form">&times;</button>
       </div>
@@ -1112,8 +1127,8 @@
           </div>
 
           <div class="feedback-field">
-            <label>Rating</label>
-            <div class="feedback-stars" aria-label="Select rating">
+            <span class="feedback-rating-label" id="feedback-rating-label">Rating</span>
+            <div class="feedback-stars" role="group" aria-labelledby="feedback-rating-label">
               <button type="button" class="feedback-star-btn active" data-value="1" aria-label="1 star">★</button>
               <button type="button" class="feedback-star-btn active" data-value="2" aria-label="2 stars">★</button>
               <button type="button" class="feedback-star-btn active" data-value="3" aria-label="3 stars">★</button>
@@ -1130,7 +1145,7 @@
         </div>
 
         <div class="feedback-form-actions">
-          <div id="feedback-status" class="feedback-status" role="alert" aria-live="polite"></div>
+          <div id="feedback-status" class="feedback-status" role="status"></div>
           <div class="feedback-button-row">
             <button type="button" class="btn-secondary" data-close-feedback>Cancel</button>
             <button type="submit" class="btn-primary">Submit Feedback</button>
@@ -1144,13 +1159,13 @@
        MODAL: COURT-ADMISSIBLE DOSSIER PREVIEW & EXPORT
        ===================================================================== -->
   <div class="modal-backdrop" id="dossier-modal">
-    <div class="modal-dossier-box">
+    <div class="modal-dossier-box" role="dialog" aria-modal="true" aria-labelledby="dossier-modal-title">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 10px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          <span style="font-family: var(--font-heading); font-size: 16px; font-weight: 700;">Court-Admissible Legal Dossier Preview</span>
+          <span id="dossier-modal-title" style="font-family: var(--font-heading); font-size: 16px; font-weight: 700;">Court-Admissible Legal Dossier Preview</span>
         </div>
-        <button id="btn-close-modal" style="color: var(--text-muted); font-size: 20px;">&times;</button>
+        <button id="btn-close-modal" type="button" aria-label="Close dossier preview" style="color: var(--text-muted); font-size: 20px;">&times;</button>
       </div>
 
       <div class="modal-body">
@@ -1197,6 +1212,8 @@
       </div>
     </div>
   </div>
+
+  </main>
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

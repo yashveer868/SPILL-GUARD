@@ -1,9 +1,12 @@
-/**
+ /**
  * Spill Sense — Application Logic & Interactive Prototype Controller
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
   const apiUrl = (path) => `${(window.SPILLGUARD_API_BASE || '').replace(/\/$/, '')}${path}`;
+  document.getElementById('login-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+  });
 
   // The static fixture remains as an offline fallback when the API is unavailable.
   try {

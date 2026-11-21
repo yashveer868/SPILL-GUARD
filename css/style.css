@@ -1066,13 +1066,24 @@ input:focus, select:focus, textarea:focus {
 }
 
 .sidebar-brand-icon {
+  appearance: none;
   width: 40px;
   height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   filter: drop-shadow(0 0 10px var(--cyan-glow));
+}
+
+.sidebar-brand-icon:focus-visible {
+  outline: 2px solid var(--cyan-primary);
+  outline-offset: 3px;
 }
 
 .sidebar-nav-items {
@@ -2691,7 +2702,8 @@ input:focus, select:focus, textarea:focus {
   grid-column: 1 / -1;
 }
 
-.feedback-field label {
+.feedback-field label,
+.feedback-rating-label {
   font-size: 12px;
   font-family: var(--font-mono);
   color: var(--text-secondary);

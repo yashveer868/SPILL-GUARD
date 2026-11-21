@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+from server.cors import configure_cors
 
 try:
     from server.ml_detector import model_status, run_detection
@@ -79,13 +80,7 @@ except ImportError:  # pragma: no cover - fallback for direct script execution
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 app = FastAPI(title="Spill Sense API", version="1.0.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+configure_cors(app)
 
 
 def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:

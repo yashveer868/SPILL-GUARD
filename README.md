@@ -3,7 +3,7 @@
 This project now includes a lightweight FastAPI backend for vessel matching, suspect ranking, and drift analysis.
 
 ## Prerequisites
-
+k
 - Python 3.10+
 - pip
 - PostgreSQL 14+
@@ -21,7 +21,7 @@ Set the PostgreSQL connection string before starting the API. PowerShell example
 ```powershell
 $env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/spillguard"
 ```
-
+bn
 ## Real emergency delivery
 
 The emergency buttons use demo mode by default. For production delivery, set
@@ -45,9 +45,15 @@ Create the `spillguard` database first. The API creates its tables and seeds the
 
 ## Run the backend
 
-```bash
+Local development origins are allowed only when `APP_ENV` is set to `development`.
+In PowerShell, start the API with:
+
+```powershell
+$env:APP_ENV = "development"
 uvicorn server.api:app --reload --host 127.0.0.1 --port 8000
 ```
+
+In production, leave `APP_ENV` unset or set it to `production`; only the configured production frontend origin is allowed.
 
 Then open:
 
